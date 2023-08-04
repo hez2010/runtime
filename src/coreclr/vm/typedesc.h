@@ -12,6 +12,16 @@
 #define TYPEDESC_H
 #include <specstrings.h>
 
+#define EvalBinary(dataType) \
+    if (strcmp(s.GetUTF8(), "AdditionOperator") == 0) { dataType res = *(dataType*)&left + *(dataType*)&right; if (type) *type = leftType; memcpy(&ret, &res, sizeof(dataType)); } \
+    if (strcmp(s.GetUTF8(), "SubtractionOperator") == 0) { dataType res = *(dataType*)&left - *(dataType*)&right; if (type) *type = leftType; memcpy(&ret, &res, sizeof(dataType)); } \
+    if (strcmp(s.GetUTF8(), "MultiplyOperator") == 0) { dataType res = *(dataType*)&left * *(dataType*)&right; if (type) *type = leftType; memcpy(&ret, &res, sizeof(dataType)); } \
+    if (strcmp(s.GetUTF8(), "DivisionOperator") == 0) { dataType res = *(dataType*)&left / *(dataType*)&right; if (type) *type = leftType; memcpy(&ret, &res, sizeof(dataType)); } \
+    if (strcmp(s.GetUTF8(), "EqualityOperator") == 0) { BOOL res = *(dataType*)&left == *(dataType*)&right; if (type) *type = CorElementType::ELEMENT_TYPE_BOOLEAN; memcpy(&ret, &res, sizeof(BOOL)); } \
+    if (strcmp(s.GetUTF8(), "LessThanOperator") == 0) { BOOL res = *(dataType*)&left < *(dataType*)&right; if (type) *type = CorElementType::ELEMENT_TYPE_BOOLEAN; memcpy(&ret, &res, sizeof(BOOL)); } \
+    if (strcmp(s.GetUTF8(), "ConjunctionOperator") == 0) { BOOL res = *(dataType*)&left && *(dataType*)&right; if (type) *type = CorElementType::ELEMENT_TYPE_BOOLEAN; memcpy(&ret, &res, sizeof(BOOL)); } \
+    if (strcmp(s.GetUTF8(), "DisjunctionOperator") == 0) { BOOL res = *(dataType*)&left || *(dataType*)&right; if (type) *type = CorElementType::ELEMENT_TYPE_BOOLEAN; memcpy(&ret, &res, sizeof(BOOL)); }
+
 class TypeHandleList;
 
 /*************************************************************************/
@@ -503,6 +513,9 @@ public:
     // Check the constraints on this type parameter hold in the supplied context for the supplied type
     BOOL SatisfiesConstraints(SigTypeContext *pTypeContext, TypeHandle thArg,
                               const InstantiationContext *pInstContext = NULL);
+
+    // Evaluate the result of const value constraint
+    uint64_t EvaluateConstValueConstraint(TypeHandle thConstraint, CorElementType* type = NULL);
 
     // Check whether the constraints on this type force it to be a reference type (i.e. it is impossible
     // to instantiate it with a value type).

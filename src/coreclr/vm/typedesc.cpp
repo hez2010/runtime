@@ -1561,9 +1561,14 @@ BOOL TypeVarTypeDesc::SatisfiesConstraints(SigTypeContext *pTypeContextOfConstra
                                                                               ClassLoader::FailIfUninstDefOrRef,
                                                                               ClassLoader::LoadTypes,
                                                                               CLASS_DEPENDENCIES_LOADED);
-
+        // A const value will only be satisfied if the evaluation result is equal to it
+        if (thArg.IsConstValue())
+        {
+            if (thArg.GetConstValue() != EvaluateConstValueConstraint(thConstraint))
+                return FALSE;
+        }
         // System.Object constraint will be always satisfied - even if argList is empty
-        if (!thConstraint.IsObjectType())
+        else if (!thConstraint.IsObjectType())
         {
             BOOL fCanCast = FALSE;
 
@@ -1650,6 +1655,95 @@ BOOL TypeVarTypeDesc::SatisfiesConstraints(SigTypeContext *pTypeContextOfConstra
         }
     }
     return TRUE;
+}
+
+uint64_t TypeVarTypeDesc::EvaluateConstValueConstraint(TypeHandle thConstraint, CorElementType* type)
+{
+    CONTRACTL
+    {
+        THROWS;
+        GC_TRIGGERS;
+        MODE_ANY;
+        
+        PRECONDITION(!thConstraint.IsNull());
+        INJECT_FAULT(COMPlusThrowOM());
+    }
+    CONTRACTL_END;
+
+    SString s;
+    uint64_t ret = 0;
+    thConstraint.AsMethodTable()->_GetFullyQualifiedNameForClass(s);
+
+    if (strcmp(s.GetUTF8(), "IBinaryExpression`3") == 0)
+    {
+        Instantiation inst = thConstraint.GetInstantiation();
+        _ASSERTE(inst.GetNumArgs() == 3);
+        CorElementType leftType;
+        uint64_t left = EvaluateConstValueConstraint(inst[1], &leftType);
+        CorElementType rightType;
+        uint64_t right = EvaluateConstValueConstraint(inst[2], &rightType);
+        _ASSERTE(leftType == rightType);
+        inst[0].AsMethodTable()->_GetFullyQualifiedNameForClass(s);
+        switch (leftType)
+        {
+            case ELEMENT_TYPE_BOOLEAN:
+            {
+                EvalBinary(uint8_t);
+                break;
+            }
+            case ELEMENT_TYPE_I1:
+            case ELEMENT_TYPE_U1:
+            {
+                EvalBinary(uint8_t);
+                break;
+            }
+            case ELEMENT_TYPE_I2:
+            case ELEMENT_TYPE_U2:
+            case ELEMENT_TYPE_CHAR:
+            {
+                EvalBinary(uint16_t);
+                break;
+            }
+            case ELEMENT_TYPE_I4:
+            case ELEMENT_TYPE_U4:
+            {
+                EvalBinary(uint32_t);
+                break;
+            }
+            case ELEMENT_TYPE_I8:
+            case ELEMENT_TYPE_U8:
+            {
+                EvalBinary(uint64_t);
+                break;
+            }
+            case ELEMENT_TYPE_R4:
+            {
+                EvalBinary(float);
+                break;
+            }
+            case ELEMENT_TYPE_R8:
+            {
+                EvalBinary(double);
+                break;
+            }
+            default:
+                _ASSERTE(!"EVALUATION NOT SUPPORTED");
+                if (type)
+                    *type = ELEMENT_TYPE_END;
+                break;
+        }
+    }
+
+    if (strcmp(s.GetUTF8(), "IConstantExpression`2") == 0)
+    {
+        Instantiation inst = thConstraint.GetInstantiation();
+        _ASSERTE(inst.GetNumArgs() == 2);
+        if (type)
+            *type = inst[1].AsConstValue()->GetConstValueType().GetInternalCorElementType();
+        ret = inst[1].AsConstValue()->GetConstValue();
+    }
+
+    return ret;
 }
 
 OBJECTREF TypeVarTypeDesc::GetManagedClassObject()

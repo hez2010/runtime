@@ -1301,6 +1301,12 @@ constTypeArg            : FLOAT32_ '(' float64 ')'           { $$ = new BinStr()
                                                                $$->appendInt16($3); }
                         | BOOL_ '(' truefalse ')'            { $$ = new BinStr(); $$->appendInt8(ELEMENT_TYPE_BOOLEAN);
                                                                $$->appendInt8($3);}
+                        | STRING_ '(' compQstring ')'        { $$ = new BinStr(); $$->appendInt8(ELEMENT_TYPE_STRING);
+                                                               corEmitInt($$, $3->length()); $$->append($3);
+                                                               delete $3; }
+                        | VALUETYPE_ className '(' bytearrayhead bytes ')' ')' { $$ = parser->MakeTypeClass(ELEMENT_TYPE_VALUETYPE, $2);
+                                                                                 corEmitInt($$, $5->length());
+                                                                                 $$->append($5); delete $5; }
                         ;
 
 

@@ -1836,6 +1836,11 @@ inline ULONG CorSigUncompressConstTypeArgData(
         case ELEMENT_TYPE_R8           :
             size = size << 3;
             break;
+        case ELEMENT_TYPE_VALUETYPE    :
+            CorSigUncompressData(pData);
+        case ELEMENT_TYPE_STRING       :
+            size = CorSigUncompressData(pData);
+            break;
         default:
             // _ASSERTE(!"Unsupported Const Type Argument");
             size = 0;

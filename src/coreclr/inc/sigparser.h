@@ -501,6 +501,7 @@ class SigParser
             case ELEMENT_TYPE_TYPEDBYREF:
             case ELEMENT_TYPE_ARRAY:
             case ELEMENT_TYPE_SZARRAY:
+            case ELEMENT_TYPE_VALUETYPE:
                 *pSize = sizeof(void *);
                 break;
 
@@ -515,10 +516,6 @@ class SigParser
             case ELEMENT_TYPE_END:
             case ELEMENT_TYPE_CMOD_REQD:
             case ELEMENT_TYPE_CMOD_OPT:
-                _ASSERTE(!"Asked for the size of an element that doesn't have a size!");
-                return E_INVALIDARG;
-
-            case ELEMENT_TYPE_VALUETYPE:
                 _ASSERTE(!"Asked for the size of an element that doesn't have a size!");
                 return E_INVALIDARG;
 

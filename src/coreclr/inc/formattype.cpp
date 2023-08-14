@@ -139,6 +139,17 @@ static void appendStrBlob(CQuickBytes *out, CorElementType type, PCCOR_SIGNATURE
         APPEND:
             appendStr(out, buff);
             break;
+        case ELEMENT_TYPE_STRING       :
+            appendChar(out, '"');
+            appendStr(out, (const char*)ptr, len);
+            appendChar(out, '"');
+            break;
+        case ELEMENT_TYPE_VALUETYPE    :
+            for (ULONG i = 0; i < len; i++) {
+                sprintf_s(buff, buffSize, "%02X ", *(uint8_t*)(ptr + i));
+                appendStr(out, buff);
+            }
+            break;
         default:
             break;
     }
@@ -546,6 +557,7 @@ PCCOR_SIGNATURE PrettyPrintType(
     CQuickBytes Appendix;
     BOOL Reiterate;
     BOOL HasData = FALSE;
+    ULONG len;
     int n;
 
     do {
@@ -592,9 +604,10 @@ PCCOR_SIGNATURE PrettyPrintType(
                 if (HasData)
                 {
                     HasData = FALSE;
+                    appendChar(out, ' ');
                     appendChar(out, '(');
                     typePtr--;
-                    ULONG len = CorSigUncompressConstTypeArgData(typePtr);
+                    len = CorSigUncompressConstTypeArgData(typePtr);
                     appendStrBlob(out, (CorElementType)typ, typePtr, len);
                     appendChar(out, ')');
                     typePtr += len;
@@ -614,12 +627,22 @@ PCCOR_SIGNATURE PrettyPrintType(
 
             DO_CLASS:
                 appendStr(out, KEYWORD((char*)str));
-                typePtr += CorSigUncompressToken(typePtr, &tk);
+                len = CorSigUncompressToken(typePtr, &tk);
+                typePtr += len;
                 if(IsNilToken(tk))
                 {
                     appendStr(out, "[ERROR! NIL TOKEN]");
                 }
                 else PrettyPrintClass(out, tk, pIMDI);
+                if (HasData) {
+                    HasData = FALSE;
+                    appendStr(out, " (bytearray (");
+                    typePtr -= len + 1;
+                    len = CorSigUncompressConstTypeArgData(typePtr);
+                    appendStrBlob(out, (CorElementType)typ, typePtr, len);
+                    appendStr(out, "))");
+                    typePtr += len;
+                }
                 REGISTER_REF(g_tkRefUser,tk)
                 break;
 

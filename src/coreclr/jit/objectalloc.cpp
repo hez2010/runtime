@@ -873,6 +873,7 @@ void ObjectAllocator::RewriteUses()
                 {
                     GenTree* data = tree->Data();
                     if (data->OperIs(GT_LCL_ADDR) &&
+                        !tree->TypeIs(TYP_BYREF) &&
                         !m_compiler->optIsVarAssigned(m_block, m_compiler->fgLastBB, tree, lclNum))
                     {
                         unsigned long long lclNumAndOff = data->AsLclVarCommon()->GetLclNum();

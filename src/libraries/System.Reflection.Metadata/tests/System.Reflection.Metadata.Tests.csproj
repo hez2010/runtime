@@ -12,20 +12,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="$(CommonTestPath)System\Security\Cryptography\SignatureSupport.cs"
-             Link="CommonTest\System\Security\Cryptography\SignatureSupport.cs" />
-    <Compile Include="$(CommonPath)Interop\Windows\Interop.Libraries.cs"
-             Link="Common\Interop\Windows\Interop.Libraries.cs" />
-    <Compile Include="$(CommonPath)Interop\Windows\Kernel32\Interop.FreeLibrary.cs"
-             Link="Common\Interop\Windows\Interop.FreeLibrary.cs" />
-    <Compile Include="$(CommonPath)Interop\Windows\Kernel32\Interop.GetModuleHandle.cs"
-             Link="Common\Interop\Windows\Interop.GetModuleHandle.cs" />
-    <Compile Include="$(CommonPath)Interop\Windows\Kernel32\Interop.LoadLibraryEx.cs"
-             Link="Common\Interop\Windows\Interop.LoadLibraryEx.cs" />
-    <Compile Include="$(CommonPath)Microsoft\Win32\SafeHandles\SafeLibraryHandle.cs"
-             Link="Common\Microsoft\Win32\SafeHandles\SafeLibraryHandle.cs" />
-    <Compile Include="$(CommonTestPath)System\IO\TempFile.cs"
-             Link="Common\System\IO\TempFile.cs" />
+    <Compile Include="$(CommonTestPath)System\Security\Cryptography\SignatureSupport.cs" Link="CommonTest\System\Security\Cryptography\SignatureSupport.cs" />
+    <Compile Include="$(CommonPath)Interop\Windows\Interop.Libraries.cs" Link="Common\Interop\Windows\Interop.Libraries.cs" />
+    <Compile Include="$(CommonPath)Interop\Windows\Kernel32\Interop.FreeLibrary.cs" Link="Common\Interop\Windows\Interop.FreeLibrary.cs" />
+    <Compile Include="$(CommonPath)Interop\Windows\Kernel32\Interop.GetModuleHandle.cs" Link="Common\Interop\Windows\Interop.GetModuleHandle.cs" />
+    <Compile Include="$(CommonPath)Interop\Windows\Kernel32\Interop.LoadLibraryEx.cs" Link="Common\Interop\Windows\Interop.LoadLibraryEx.cs" />
+    <Compile Include="$(CommonPath)Microsoft\Win32\SafeHandles\SafeLibraryHandle.cs" Link="Common\Microsoft\Win32\SafeHandles\SafeLibraryHandle.cs" />
+    <Compile Include="$(CommonTestPath)System\IO\TempFile.cs" Link="Common\System\IO\TempFile.cs" />
 
     <Compile Include="Metadata\BlobContentIdTests.cs" />
     <Compile Include="Metadata\BlobTests.cs" />
@@ -118,6 +111,8 @@
     <EmbeddedResource Include="Resources\Misc\Deterministic.dll" />
     <None Include="Resources\Misc\Debug.cs" />
     <EmbeddedResource Include="Resources\Misc\Debug.dll" />
+    <EmbeddedResource Include="Resources\NetModule\AppConstGenerics.dll" />
+    <None Include="resources\netmodule\AppConstGenerics.il" />
     <None Include="Resources\NetModule\AppCS.cs" />
     <EmbeddedResource Include="Resources\NetModule\AppCS.exe" />
     <None Include="Resources\NetModule\ModuleCS00.cs" />

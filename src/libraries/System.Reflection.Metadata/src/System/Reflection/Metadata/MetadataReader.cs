@@ -153,6 +153,7 @@ namespace System.Reflection.Metadata
         private readonly MetadataKind _metadataKind;
         private readonly MetadataStreamKind _metadataStreamKind;
         private readonly DebugMetadataHeader? _debugMetadataHeader;
+        private Version _metadataModelVersion = default!;
 
         internal StringHeap StringHeap;
         internal BlobHeap BlobHeap;
@@ -415,6 +416,7 @@ namespace System.Reflection.Metadata
         internal ExportedTypeTableReader ExportedTypeTable;
         internal ManifestResourceTableReader ManifestResourceTable;
         internal NestedClassTableReader NestedClassTable;
+        internal GenericParamTableReaderV2_0 GenericParamTableV2_0;
         internal GenericParamTableReader GenericParamTable;
         internal MethodSpecTableReader MethodSpecTable;
         internal GenericParamConstraintTableReader GenericParamConstraintTable;
@@ -439,11 +441,8 @@ namespace System.Reflection.Metadata
             // reserved (shall be ignored):
             reader.ReadUInt32();
 
-            // major version (shall be ignored):
-            reader.ReadByte();
-
-            // minor version (shall be ignored):
-            reader.ReadByte();
+            // major version and minor version:
+            this._metadataModelVersion = new Version(reader.ReadByte(), reader.ReadByte());
 
             // heap sizes:
             heapSizes = (HeapSizes)reader.ReadByte();
@@ -734,8 +733,16 @@ namespace System.Reflection.Metadata
             this.NestedClassTable = new NestedClassTableReader(rowCounts[(int)TableIndex.NestedClass], IsDeclaredSorted(TableMask.NestedClass), GetReferenceSize(rowCounts, TableIndex.TypeDef), metadataTablesMemoryBlock, totalRequiredSize);
             totalRequiredSize += this.NestedClassTable.Block.Length;
 
-            this.GenericParamTable = new GenericParamTableReader(rowCounts[(int)TableIndex.GenericParam], IsDeclaredSorted(TableMask.GenericParam), typeOrMethodDefRefSize, stringHeapRefSize, metadataTablesMemoryBlock, totalRequiredSize);
-            totalRequiredSize += this.GenericParamTable.Block.Length;
+            if (this.MetadataModelVersion.Major == 2 && this.MetadataModelVersion.Minor == 0)
+            {
+                this.GenericParamTableV2_0 = new GenericParamTableReaderV2_0(rowCounts[(int)TableIndex.GenericParam], IsDeclaredSorted(TableMask.GenericParam), typeOrMethodDefRefSize, stringHeapRefSize, metadataTablesMemoryBlock, totalRequiredSize);
+                totalRequiredSize += this.GenericParamTableV2_0.Block.Length;
+            }
+            else
+            {
+                this.GenericParamTable = new GenericParamTableReader(rowCounts[(int)TableIndex.GenericParam], IsDeclaredSorted(TableMask.GenericParam), typeOrMethodDefRefSize, typeDefOrRefRefSize, stringHeapRefSize, metadataTablesMemoryBlock, totalRequiredSize);
+                totalRequiredSize += this.GenericParamTable.Block.Length;
+            }
 
             this.MethodSpecTable = new MethodSpecTableReader(rowCounts[(int)TableIndex.MethodSpec], methodDefOrRefRefSize, blobHeapRefSize, metadataTablesMemoryBlock, totalRequiredSize);
             totalRequiredSize += this.MethodSpecTable.Block.Length;
@@ -1001,6 +1008,11 @@ namespace System.Reflection.Metadata
         /// Version string read from metadata header.
         /// </summary>
         public string MetadataVersion => _versionString;
+
+        /// <summary>
+        /// Version of metadata model read from metadata header.
+        /// </summary>
+        public Version MetadataModelVersion => _metadataModelVersion;
 
         /// <summary>
         /// Information decoded from #Pdb stream, or null if the stream is not present.

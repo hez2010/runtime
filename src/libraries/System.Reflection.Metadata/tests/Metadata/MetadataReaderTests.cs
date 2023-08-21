@@ -148,7 +148,7 @@ namespace System.Reflection.Metadata.Tests
             int clrIndex = IndexOf(peImage, "CLR"u8.ToArray(), headers.MetadataStartOffset);
             Assert.NotEqual(-1, clrIndex);
             //find 5, This is the streamcount and is the last thing that should be read befor the test.
-            int fiveIndex = IndexOf(peImage, new byte[] {5}, headers.MetadataStartOffset + clrIndex);
+            int fiveIndex = IndexOf(peImage, new byte[] { 5 }, headers.MetadataStartOffset + clrIndex);
             Assert.NotEqual(-1, fiveIndex);
 
             peImage[clrIndex + headers.MetadataStartOffset] = 0xFF;
@@ -158,7 +158,7 @@ namespace System.Reflection.Metadata.Tests
             //NotEnoughSpaceForStreamHeaderName for index of five + uint16 + COR20Constants.MinimumSizeofStreamHeader
             Assert.Throws<BadImageFormatException>(() => new MetadataReader((byte*)pinned.AddrOfPinnedObject() + headers.MetadataStartOffset, fiveIndex + clrIndex + COR20Constants.MinimumSizeofStreamHeader + 2, MetadataReaderOptions.Default));
             //SR.StreamHeaderTooSmall
-            Assert.Throws<BadImageFormatException>(() => new MetadataReader((byte*)pinned.AddrOfPinnedObject() + headers.MetadataStartOffset, fiveIndex + clrIndex + COR20Constants.MinimumSizeofStreamHeader , MetadataReaderOptions.Default));
+            Assert.Throws<BadImageFormatException>(() => new MetadataReader((byte*)pinned.AddrOfPinnedObject() + headers.MetadataStartOffset, fiveIndex + clrIndex + COR20Constants.MinimumSizeofStreamHeader, MetadataReaderOptions.Default));
 
         }
 
@@ -176,7 +176,7 @@ namespace System.Reflection.Metadata.Tests
             Assert.NotEqual(-1, fiveIndex);
             Array.Copy(BitConverter.GetBytes((ushort)1), 0, peImage, fiveIndex + headers.MetadataStartOffset, BitConverter.GetBytes((ushort)1).Length);
 
-            string[] streamNames= new string[]
+            string[] streamNames = new string[]
             {
                 COR20Constants.StringStreamName, COR20Constants.BlobStreamName, COR20Constants.GUIDStreamName,
                 COR20Constants.UserStringStreamName, COR20Constants.CompressedMetadataTableStreamName,
@@ -2006,6 +2006,59 @@ namespace System.Reflection.Metadata.Tests
         public void ValidateGenericParamTable()
         {
             // AppCS - 7
+            var expNames = new string[] { "T", "U", "T", "V", "T", "U", "W" };
+            var expFlags = new GenericParameterAttributes[]
+            {
+                /* 0 */ GenericParameterAttributes.None,
+                /* 0 */ GenericParameterAttributes.None,
+                /* 0 */ GenericParameterAttributes.None,
+                /* 0 */ GenericParameterAttributes.None,
+                /* 0 */ GenericParameterAttributes.None,
+                /* 0 */ GenericParameterAttributes.None,
+                /* 0 */ GenericParameterAttributes.None,
+            };
+            var expNumber = new ushort[] { 0, 1, 0, 1, 0, 0, 1 };
+            var expOwnerTokens = new int[] { 0x06000003, 0x06000003, 0x02000004, 0x02000004, 0x06000004, 0x06000006, 0x06000006, };
+            var expTypeKinds = new HandleKind[]
+            {
+                HandleKind.TypeDefinition,
+                HandleKind.TypeSpecification,
+                HandleKind.TypeDefinition,
+                HandleKind.TypeSpecification,
+                HandleKind.TypeDefinition,
+                HandleKind.TypeDefinition,
+                HandleKind.TypeSpecification
+            };
+            var expTypeTokens = new int[] { 0x2000000, 0x1B000003, 0x2000000, 0x1B000005, 0x2000000, 0x2000000, 0x1B000003, };
+
+            var reader = GetMetadataReader(NetModule.AppConstGenerics);
+
+            // Validity Rules
+            Assert.Equal(expNames.Length, reader.GenericParamTable.NumberOfRows);
+
+            for (int i = 0; i < reader.GenericParamTable.NumberOfRows; i++)
+            {
+                var handle = GenericParameterHandle.FromRowId(i + 1);
+                Assert.Equal(expNames[i], reader.GetString(reader.GenericParamTable.GetName(handle)));
+                Assert.Equal(expFlags[i], reader.GenericParamTable.GetFlags(handle));
+                Assert.Equal(expNumber[i], reader.GenericParamTable.GetNumber(handle));
+                Assert.Equal(expOwnerTokens[i], reader.GenericParamTable.GetOwner(handle).Token);
+                var type = reader.GenericParamTable.GetType(handle);
+                Assert.Equal(expTypeKinds[i], type.Kind);
+                Assert.Equal(expTypeTokens[i], type.Token);
+            }
+        }
+
+        /// <summary>
+        /// GenericParamV2_0 Columns:
+        ///     Name (offset to #string)
+        ///     Flags, Number (2 byte unsigned)
+        ///     Owner (token to TypeDefOrRef)
+        /// </summary>
+        [Fact]
+        public void ValidateGenericParamTableV2_0()
+        {
+            // AppCS - 7
             var expNames = new string[] { "V", "CT", "CO", "T", "CT1", "CO1", "T1" };
             var expFlags = new GenericParameterAttributes[]
             {
@@ -2041,15 +2094,15 @@ namespace System.Reflection.Metadata.Tests
             var reader = GetMetadataReader(NetModule.AppCS);
 
             // Validity Rules
-            Assert.Equal(expNames.Length, reader.GenericParamTable.NumberOfRows);
+            Assert.Equal(expNames.Length, reader.GenericParamTableV2_0.NumberOfRows);
 
-            for (int i = 0; i < reader.GenericParamTable.NumberOfRows; i++)
+            for (int i = 0; i < reader.GenericParamTableV2_0.NumberOfRows; i++)
             {
                 var handle = GenericParameterHandle.FromRowId(i + 1);
-                Assert.Equal(expNames[i], reader.GetString(reader.GenericParamTable.GetName(handle)));
-                Assert.Equal(expFlags[i], reader.GenericParamTable.GetFlags(handle));
-                Assert.Equal(expNumber[i], reader.GenericParamTable.GetNumber(handle));
-                Assert.Equal(expTypeTokens[i], reader.GenericParamTable.GetOwner(handle).Token);
+                Assert.Equal(expNames[i], reader.GetString(reader.GenericParamTableV2_0.GetName(handle)));
+                Assert.Equal(expFlags[i], reader.GenericParamTableV2_0.GetFlags(handle));
+                Assert.Equal(expNumber[i], reader.GenericParamTableV2_0.GetNumber(handle));
+                Assert.Equal(expTypeTokens[i], reader.GenericParamTableV2_0.GetOwner(handle).Token);
             }
 
             // =======================================
@@ -2057,15 +2110,15 @@ namespace System.Reflection.Metadata.Tests
             reader = GetMetadataReader(NetModule.ModuleCS01, true);
 
             // Validity Rules
-            Assert.Equal(modNames.Length, reader.GenericParamTable.NumberOfRows);
+            Assert.Equal(modNames.Length, reader.GenericParamTableV2_0.NumberOfRows);
 
-            for (int i = 0; i < reader.GenericParamTable.NumberOfRows; i++)
+            for (int i = 0; i < reader.GenericParamTableV2_0.NumberOfRows; i++)
             {
                 var handle = GenericParameterHandle.FromRowId(i + 1);
-                Assert.Equal(modNames[i], reader.GetString(reader.GenericParamTable.GetName(handle)));
-                Assert.Equal(modFlags[i], reader.GenericParamTable.GetFlags(handle));
-                Assert.Equal(modNumber[i], reader.GenericParamTable.GetNumber(handle));
-                Assert.Equal(modTypeTokens[i], reader.GenericParamTable.GetOwner(handle).Token);
+                Assert.Equal(modNames[i], reader.GetString(reader.GenericParamTableV2_0.GetName(handle)));
+                Assert.Equal(modFlags[i], reader.GenericParamTableV2_0.GetFlags(handle));
+                Assert.Equal(modNumber[i], reader.GenericParamTableV2_0.GetNumber(handle));
+                Assert.Equal(modTypeTokens[i], reader.GenericParamTableV2_0.GetOwner(handle).Token);
             }
         }
 

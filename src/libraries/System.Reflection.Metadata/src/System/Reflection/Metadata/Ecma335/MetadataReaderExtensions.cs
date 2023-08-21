@@ -88,7 +88,7 @@ namespace System.Reflection.Metadata.Ecma335
                 TableIndex.ExportedType => reader.ExportedTypeTable.RowSize,
                 TableIndex.ManifestResource => reader.ManifestResourceTable.RowSize,
                 TableIndex.NestedClass => reader.NestedClassTable.RowSize,
-                TableIndex.GenericParam => reader.GenericParamTable.RowSize,
+                TableIndex.GenericParam => reader.GenericParamTableV2_0.RowSize,
                 TableIndex.MethodSpec => reader.MethodSpecTable.RowSize,
                 TableIndex.GenericParamConstraint => reader.GenericParamConstraintTable.RowSize,
 
@@ -169,7 +169,7 @@ namespace System.Reflection.Metadata.Ecma335
                 TableIndex.ExportedType => reader.ExportedTypeTable.Block,
                 TableIndex.ManifestResource => reader.ManifestResourceTable.Block,
                 TableIndex.NestedClass => reader.NestedClassTable.Block,
-                TableIndex.GenericParam => reader.GenericParamTable.Block,
+                TableIndex.GenericParam => reader.GenericParamTableV2_0.Block,
                 TableIndex.MethodSpec => reader.MethodSpecTable.Block,
                 TableIndex.GenericParamConstraint => reader.GenericParamConstraintTable.Block,
 

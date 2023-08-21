@@ -853,6 +853,7 @@ namespace System.Reflection.Metadata
         public int Index { get { throw null; } }
         public System.Reflection.Metadata.StringHandle Name { get { throw null; } }
         public System.Reflection.Metadata.EntityHandle Parent { get { throw null; } }
+        public System.Reflection.Metadata.EntityHandle Type { get { throw null; } }
         public System.Reflection.Metadata.GenericParameterConstraintHandleCollection GetConstraints() { throw null; }
         public System.Reflection.Metadata.CustomAttributeHandleCollection GetCustomAttributes() { throw null; }
     }
@@ -1653,6 +1654,7 @@ namespace System.Reflection.Metadata
         public int MetadataLength { get { throw null; } }
         public unsafe byte* MetadataPointer { get { throw null; } }
         public string MetadataVersion { get { throw null; } }
+        public Version MetadataModelVersion { get { throw null; } }
         public System.Reflection.Metadata.MethodDebugInformationHandleCollection MethodDebugInformation { get { throw null; } }
         public System.Reflection.Metadata.MethodDefinitionHandleCollection MethodDefinitions { get { throw null; } }
         public System.Reflection.Metadata.MetadataReaderOptions Options { get { throw null; } }

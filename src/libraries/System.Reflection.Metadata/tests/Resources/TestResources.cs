@@ -47,6 +47,7 @@ namespace System.Reflection.Metadata.Tests
         public static readonly byte[] ModuleCS01 = ResourceHelper.GetResource("NetModule.ModuleCS01.mod");
         public static readonly byte[] ModuleVB01 = ResourceHelper.GetResource("NetModule.ModuleVB01.mod");
         public static readonly byte[] AppCS = ResourceHelper.GetResource("NetModule.AppCS.exe");
+        public static readonly byte[] AppConstGenerics = ResourceHelper.GetResource("NetModule.AppConstGenerics.dll");
     }
 
     internal static class Namespace

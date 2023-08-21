@@ -276,4 +276,7 @@
   <data name="Arg_AmbiguousMatchException_MemberInfo" xml:space="preserve">
     <value>Ambiguous match found for '{0} {1}'.</value>
   </data>
+  <data name="UnexpectedSignatureTypeCode" xml:space="preserve">
+    <value>Unexpected SignatureTypeCode: (0x{0:x}).</value>
+  </data>
 </root>

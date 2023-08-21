@@ -56,7 +56,7 @@ namespace System.Reflection.Metadata.Tests
                 Assert.Equal(8 + 2 + 2 + 2, mdReader.ExportedTypeTable.RowSize);
                 Assert.Equal(8 + 2 + 2, mdReader.ManifestResourceTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.NestedClassTable.RowSize);
-                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTable.RowSize);
+                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTableV2_0.RowSize);
                 Assert.Equal(2 + 2, mdReader.MethodSpecTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.GenericParamConstraintTable.RowSize);
                 Assert.Equal(2 + 2 + 2 + 2, mdReader.DocumentTable.RowSize);
@@ -126,7 +126,7 @@ namespace System.Reflection.Metadata.Tests
                 Assert.Equal(8 + 2 + 2 + 2, mdReader.ExportedTypeTable.RowSize);
                 Assert.Equal(8 + 2 + 2, mdReader.ManifestResourceTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.NestedClassTable.RowSize);
-                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTable.RowSize);
+                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTableV2_0.RowSize);
                 Assert.Equal(2 + 2, mdReader.MethodSpecTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.GenericParamConstraintTable.RowSize);
                 Assert.Equal(2 + LARGE + 2 + LARGE, mdReader.DocumentTable.RowSize);
@@ -194,7 +194,7 @@ namespace System.Reflection.Metadata.Tests
                 Assert.Equal(8 + 2 + 2 + 2, mdReader.ExportedTypeTable.RowSize);
                 Assert.Equal(8 + 2 + 2, mdReader.ManifestResourceTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.NestedClassTable.RowSize);
-                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTable.RowSize);
+                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTableV2_0.RowSize);
                 Assert.Equal(2 + LARGE, mdReader.MethodSpecTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.GenericParamConstraintTable.RowSize);
                 Assert.Equal(LARGE + 2 + LARGE + 2, mdReader.DocumentTable.RowSize);
@@ -262,7 +262,7 @@ namespace System.Reflection.Metadata.Tests
                 Assert.Equal(8 + LARGE + LARGE + 2, mdReader.ExportedTypeTable.RowSize);
                 Assert.Equal(8 + LARGE + 2, mdReader.ManifestResourceTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.NestedClassTable.RowSize);
-                Assert.Equal(4 + 2 + LARGE, mdReader.GenericParamTable.RowSize);
+                Assert.Equal(4 + 2 + LARGE, mdReader.GenericParamTableV2_0.RowSize);
                 Assert.Equal(2 + 2, mdReader.MethodSpecTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.GenericParamConstraintTable.RowSize);
                 Assert.Equal(2 + 2 + 2 + 2, mdReader.DocumentTable.RowSize);
@@ -332,7 +332,7 @@ namespace System.Reflection.Metadata.Tests
                 Assert.Equal(8 + 2 + 2 + 2, mdReader.ExportedTypeTable.RowSize);
                 Assert.Equal(8 + 2 + 2, mdReader.ManifestResourceTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.NestedClassTable.RowSize);
-                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTable.RowSize);
+                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTableV2_0.RowSize);
                 Assert.Equal(2 + 2, mdReader.MethodSpecTable.RowSize);
                 Assert.Equal(2 + LARGE, mdReader.GenericParamConstraintTable.RowSize);
                 Assert.Equal(2 + 2 + 2 + 2, mdReader.DocumentTable.RowSize);
@@ -404,7 +404,7 @@ namespace System.Reflection.Metadata.Tests
                 Assert.Equal(8 + 2 + 2 + 2, mdReader.ExportedTypeTable.RowSize);
                 Assert.Equal(8 + 2 + 2, mdReader.ManifestResourceTable.RowSize);
                 Assert.Equal(LARGE + LARGE, mdReader.NestedClassTable.RowSize);
-                Assert.Equal(4 + LARGE + 2, mdReader.GenericParamTable.RowSize);
+                Assert.Equal(4 + LARGE + 2, mdReader.GenericParamTableV2_0.RowSize);
                 Assert.Equal(2 + 2, mdReader.MethodSpecTable.RowSize);
                 Assert.Equal(2 + LARGE, mdReader.GenericParamConstraintTable.RowSize);
                 Assert.Equal(2 + 2 + 2 + 2, mdReader.DocumentTable.RowSize);
@@ -476,7 +476,7 @@ namespace System.Reflection.Metadata.Tests
                 Assert.Equal(8 + 2 + 2 + 2, mdReader.ExportedTypeTable.RowSize);
                 Assert.Equal(8 + 2 + 2, mdReader.ManifestResourceTable.RowSize);
                 Assert.Equal(LARGE + LARGE, mdReader.NestedClassTable.RowSize);
-                Assert.Equal(4 + LARGE + 2, mdReader.GenericParamTable.RowSize);
+                Assert.Equal(4 + LARGE + 2, mdReader.GenericParamTableV2_0.RowSize);
                 Assert.Equal(2 + 2, mdReader.MethodSpecTable.RowSize);
                 Assert.Equal(2 + LARGE, mdReader.GenericParamConstraintTable.RowSize);
                 Assert.Equal(2 + 2 + 2 + 2, mdReader.DocumentTable.RowSize);
@@ -546,7 +546,7 @@ namespace System.Reflection.Metadata.Tests
                 Assert.Equal(8 + 2 + 2 + 2, mdReader.ExportedTypeTable.RowSize);
                 Assert.Equal(8 + 2 + 2, mdReader.ManifestResourceTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.NestedClassTable.RowSize);
-                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTable.RowSize);
+                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTableV2_0.RowSize);
                 Assert.Equal(2 + 2, mdReader.MethodSpecTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.GenericParamConstraintTable.RowSize);
                 Assert.Equal(2 + 2 + 2 + 2, mdReader.DocumentTable.RowSize);
@@ -618,7 +618,7 @@ namespace System.Reflection.Metadata.Tests
                 Assert.Equal(8 + 2 + 2 + 2, mdReader.ExportedTypeTable.RowSize);
                 Assert.Equal(8 + 2 + 2, mdReader.ManifestResourceTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.NestedClassTable.RowSize);
-                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTable.RowSize);
+                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTableV2_0.RowSize);
                 Assert.Equal(2 + 2, mdReader.MethodSpecTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.GenericParamConstraintTable.RowSize);
                 Assert.Equal(2 + 2 + 2 + 2, mdReader.DocumentTable.RowSize);
@@ -690,7 +690,7 @@ namespace System.Reflection.Metadata.Tests
                 Assert.Equal(8 + 2 + 2 + 2, mdReader.ExportedTypeTable.RowSize);
                 Assert.Equal(8 + 2 + 2, mdReader.ManifestResourceTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.NestedClassTable.RowSize);
-                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTable.RowSize);
+                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTableV2_0.RowSize);
                 Assert.Equal(2 + 2, mdReader.MethodSpecTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.GenericParamConstraintTable.RowSize);
                 Assert.Equal(2 + 2 + 2 + 2, mdReader.DocumentTable.RowSize);
@@ -760,7 +760,7 @@ namespace System.Reflection.Metadata.Tests
                 Assert.Equal(8 + 2 + 2 + 2, mdReader.ExportedTypeTable.RowSize);
                 Assert.Equal(8 + 2 + 2, mdReader.ManifestResourceTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.NestedClassTable.RowSize);
-                Assert.Equal(4 + LARGE + 2, mdReader.GenericParamTable.RowSize);
+                Assert.Equal(4 + LARGE + 2, mdReader.GenericParamTableV2_0.RowSize);
                 Assert.Equal(LARGE + 2, mdReader.MethodSpecTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.GenericParamConstraintTable.RowSize);
                 Assert.Equal(2 + 2 + 2 + 2, mdReader.DocumentTable.RowSize);
@@ -832,7 +832,7 @@ namespace System.Reflection.Metadata.Tests
                 Assert.Equal(8 + 2 + 2 + 2, mdReader.ExportedTypeTable.RowSize);
                 Assert.Equal(8 + 2 + 2, mdReader.ManifestResourceTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.NestedClassTable.RowSize);
-                Assert.Equal(4 + LARGE + 2, mdReader.GenericParamTable.RowSize);
+                Assert.Equal(4 + LARGE + 2, mdReader.GenericParamTableV2_0.RowSize);
                 Assert.Equal(LARGE + 2, mdReader.MethodSpecTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.GenericParamConstraintTable.RowSize);
                 Assert.Equal(2 + 2 + 2 + 2, mdReader.DocumentTable.RowSize);
@@ -902,7 +902,7 @@ namespace System.Reflection.Metadata.Tests
                 Assert.Equal(8 + 2 + 2 + 2, mdReader.ExportedTypeTable.RowSize);
                 Assert.Equal(8 + 2 + 2, mdReader.ManifestResourceTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.NestedClassTable.RowSize);
-                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTable.RowSize);
+                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTableV2_0.RowSize);
                 Assert.Equal(2 + 2, mdReader.MethodSpecTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.GenericParamConstraintTable.RowSize);
                 Assert.Equal(2 + 2 + 2 + 2, mdReader.DocumentTable.RowSize);
@@ -975,7 +975,7 @@ namespace System.Reflection.Metadata.Tests
                 Assert.Equal(8 + 2 + 2 + 2, mdReader.ExportedTypeTable.RowSize);
                 Assert.Equal(8 + 2 + 2, mdReader.ManifestResourceTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.NestedClassTable.RowSize);
-                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTable.RowSize);
+                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTableV2_0.RowSize);
                 Assert.Equal(2 + 2, mdReader.MethodSpecTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.GenericParamConstraintTable.RowSize);
                 Assert.Equal(2 + 2 + 2 + 2, mdReader.DocumentTable.RowSize);
@@ -1045,7 +1045,7 @@ namespace System.Reflection.Metadata.Tests
                 Assert.Equal(8 + 2 + 2 + 2, mdReader.ExportedTypeTable.RowSize);
                 Assert.Equal(8 + 2 + 2, mdReader.ManifestResourceTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.NestedClassTable.RowSize);
-                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTable.RowSize);
+                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTableV2_0.RowSize);
                 Assert.Equal(LARGE + 2, mdReader.MethodSpecTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.GenericParamConstraintTable.RowSize);
                 Assert.Equal(2 + 2 + 2 + 2, mdReader.DocumentTable.RowSize);
@@ -1115,7 +1115,7 @@ namespace System.Reflection.Metadata.Tests
                 Assert.Equal(8 + 2 + 2 + 2, mdReader.ExportedTypeTable.RowSize);
                 Assert.Equal(8 + 2 + 2, mdReader.ManifestResourceTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.NestedClassTable.RowSize);
-                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTable.RowSize);
+                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTableV2_0.RowSize);
                 Assert.Equal(2 + 2, mdReader.MethodSpecTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.GenericParamConstraintTable.RowSize);
                 Assert.Equal(2 + 2 + 2 + 2, mdReader.DocumentTable.RowSize);
@@ -1185,7 +1185,7 @@ namespace System.Reflection.Metadata.Tests
                 Assert.Equal(8 + 2 + 2 + 2, mdReader.ExportedTypeTable.RowSize);
                 Assert.Equal(8 + 2 + 2, mdReader.ManifestResourceTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.NestedClassTable.RowSize);
-                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTable.RowSize);
+                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTableV2_0.RowSize);
                 Assert.Equal(2 + 2, mdReader.MethodSpecTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.GenericParamConstraintTable.RowSize);
                 Assert.Equal(2 + 2 + 2 + 2, mdReader.DocumentTable.RowSize);
@@ -1255,7 +1255,7 @@ namespace System.Reflection.Metadata.Tests
                 Assert.Equal(8 + 2 + 2 + 2, mdReader.ExportedTypeTable.RowSize);
                 Assert.Equal(8 + 2 + 2, mdReader.ManifestResourceTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.NestedClassTable.RowSize);
-                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTable.RowSize);
+                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTableV2_0.RowSize);
                 Assert.Equal(2 + 2, mdReader.MethodSpecTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.GenericParamConstraintTable.RowSize);
                 Assert.Equal(2 + 2 + 2 + 2, mdReader.DocumentTable.RowSize);
@@ -1325,7 +1325,7 @@ namespace System.Reflection.Metadata.Tests
                 Assert.Equal(8 + 2 + 2 + 2, mdReader.ExportedTypeTable.RowSize);
                 Assert.Equal(8 + 2 + 2, mdReader.ManifestResourceTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.NestedClassTable.RowSize);
-                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTable.RowSize);
+                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTableV2_0.RowSize);
                 Assert.Equal(2 + 2, mdReader.MethodSpecTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.GenericParamConstraintTable.RowSize);
                 Assert.Equal(2 + 2 + 2 + 2, mdReader.DocumentTable.RowSize);
@@ -1397,7 +1397,7 @@ namespace System.Reflection.Metadata.Tests
                 Assert.Equal(8 + 2 + 2 + LARGE, mdReader.ExportedTypeTable.RowSize);
                 Assert.Equal(8 + 2 + LARGE, mdReader.ManifestResourceTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.NestedClassTable.RowSize);
-                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTable.RowSize);
+                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTableV2_0.RowSize);
                 Assert.Equal(2 + 2, mdReader.MethodSpecTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.GenericParamConstraintTable.RowSize);
                 Assert.Equal(2 + 2 + 2 + 2, mdReader.DocumentTable.RowSize);
@@ -1469,7 +1469,7 @@ namespace System.Reflection.Metadata.Tests
                 Assert.Equal(8 + 2 + 2 + LARGE, mdReader.ExportedTypeTable.RowSize);
                 Assert.Equal(8 + 2 + LARGE, mdReader.ManifestResourceTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.NestedClassTable.RowSize);
-                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTable.RowSize);
+                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTableV2_0.RowSize);
                 Assert.Equal(2 + 2, mdReader.MethodSpecTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.GenericParamConstraintTable.RowSize);
                 Assert.Equal(2 + 2 + 2 + 2, mdReader.DocumentTable.RowSize);
@@ -1541,7 +1541,7 @@ namespace System.Reflection.Metadata.Tests
                 Assert.Equal(8 + 2 + 2 + LARGE, mdReader.ExportedTypeTable.RowSize);
                 Assert.Equal(8 + 2 + LARGE, mdReader.ManifestResourceTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.NestedClassTable.RowSize);
-                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTable.RowSize);
+                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTableV2_0.RowSize);
                 Assert.Equal(2 + 2, mdReader.MethodSpecTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.GenericParamConstraintTable.RowSize);
                 Assert.Equal(2 + 2 + 2 + 2, mdReader.DocumentTable.RowSize);
@@ -1611,7 +1611,7 @@ namespace System.Reflection.Metadata.Tests
                 Assert.Equal(8 + 2 + 2 + 2, mdReader.ExportedTypeTable.RowSize);
                 Assert.Equal(8 + 2 + 2, mdReader.ManifestResourceTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.NestedClassTable.RowSize);
-                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTable.RowSize);
+                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTableV2_0.RowSize);
                 Assert.Equal(2 + 2, mdReader.MethodSpecTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.GenericParamConstraintTable.RowSize);
                 Assert.Equal(2 + 2 + 2 + 2, mdReader.DocumentTable.RowSize);
@@ -1681,7 +1681,7 @@ namespace System.Reflection.Metadata.Tests
                 Assert.Equal(8 + 2 + 2 + 2, mdReader.ExportedTypeTable.RowSize);
                 Assert.Equal(8 + 2 + 2, mdReader.ManifestResourceTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.NestedClassTable.RowSize);
-                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTable.RowSize);
+                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTableV2_0.RowSize);
                 Assert.Equal(2 + 2, mdReader.MethodSpecTable.RowSize);
                 Assert.Equal(LARGE + 2, mdReader.GenericParamConstraintTable.RowSize);
                 Assert.Equal(2 + 2 + 2 + 2, mdReader.DocumentTable.RowSize);
@@ -1751,7 +1751,7 @@ namespace System.Reflection.Metadata.Tests
                 Assert.Equal(8 + 2 + 2 + 2, mdReader.ExportedTypeTable.RowSize);
                 Assert.Equal(8 + 2 + 2, mdReader.ManifestResourceTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.NestedClassTable.RowSize);
-                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTable.RowSize);
+                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTableV2_0.RowSize);
                 Assert.Equal(2 + 2, mdReader.MethodSpecTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.GenericParamConstraintTable.RowSize);
                 Assert.Equal(2 + 2 + 2 + 2, mdReader.DocumentTable.RowSize);
@@ -1821,7 +1821,7 @@ namespace System.Reflection.Metadata.Tests
                 Assert.Equal(8 + 2 + 2 + 2, mdReader.ExportedTypeTable.RowSize);
                 Assert.Equal(8 + 2 + 2, mdReader.ManifestResourceTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.NestedClassTable.RowSize);
-                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTable.RowSize);
+                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTableV2_0.RowSize);
                 Assert.Equal(2 + 2, mdReader.MethodSpecTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.GenericParamConstraintTable.RowSize);
                 Assert.Equal(2 + 2 + 2 + 2, mdReader.DocumentTable.RowSize);
@@ -1891,7 +1891,7 @@ namespace System.Reflection.Metadata.Tests
                 Assert.Equal(8 + 2 + 2 + 2, mdReader.ExportedTypeTable.RowSize);
                 Assert.Equal(8 + 2 + 2, mdReader.ManifestResourceTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.NestedClassTable.RowSize);
-                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTable.RowSize);
+                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTableV2_0.RowSize);
                 Assert.Equal(2 + 2, mdReader.MethodSpecTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.GenericParamConstraintTable.RowSize);
                 Assert.Equal(2 + 2 + 2 + 2, mdReader.DocumentTable.RowSize);
@@ -1961,7 +1961,7 @@ namespace System.Reflection.Metadata.Tests
                 Assert.Equal(8 + 2 + 2 + 2, mdReader.ExportedTypeTable.RowSize);
                 Assert.Equal(8 + 2 + 2, mdReader.ManifestResourceTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.NestedClassTable.RowSize);
-                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTable.RowSize);
+                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTableV2_0.RowSize);
                 Assert.Equal(2 + 2, mdReader.MethodSpecTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.GenericParamConstraintTable.RowSize);
                 Assert.Equal(2 + 2 + 2 + 2, mdReader.DocumentTable.RowSize);
@@ -2031,7 +2031,7 @@ namespace System.Reflection.Metadata.Tests
                 Assert.Equal(8 + 2 + 2 + 2, mdReader.ExportedTypeTable.RowSize);
                 Assert.Equal(8 + 2 + 2, mdReader.ManifestResourceTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.NestedClassTable.RowSize);
-                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTable.RowSize);
+                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTableV2_0.RowSize);
                 Assert.Equal(2 + 2, mdReader.MethodSpecTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.GenericParamConstraintTable.RowSize);
                 Assert.Equal(2 + 2 + 2 + 2, mdReader.DocumentTable.RowSize);
@@ -2101,7 +2101,7 @@ namespace System.Reflection.Metadata.Tests
                 Assert.Equal(8 + 2 + 2 + 2, mdReader.ExportedTypeTable.RowSize);
                 Assert.Equal(8 + 2 + 2, mdReader.ManifestResourceTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.NestedClassTable.RowSize);
-                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTable.RowSize);
+                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTableV2_0.RowSize);
                 Assert.Equal(2 + 2, mdReader.MethodSpecTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.GenericParamConstraintTable.RowSize);
                 Assert.Equal(2 + 2 + 2 + 2, mdReader.DocumentTable.RowSize);
@@ -2171,7 +2171,7 @@ namespace System.Reflection.Metadata.Tests
                 Assert.Equal(8 + 2 + 2 + 2, mdReader.ExportedTypeTable.RowSize);
                 Assert.Equal(8 + 2 + 2, mdReader.ManifestResourceTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.NestedClassTable.RowSize);
-                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTable.RowSize);
+                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTableV2_0.RowSize);
                 Assert.Equal(2 + 2, mdReader.MethodSpecTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.GenericParamConstraintTable.RowSize);
                 Assert.Equal(2 + 2 + 2 + 2, mdReader.DocumentTable.RowSize);
@@ -2256,7 +2256,7 @@ namespace System.Reflection.Metadata.Tests
                 Assert.Equal(8 + 2 + 2 + 2, mdReader.ExportedTypeTable.RowSize);
                 Assert.Equal(8 + 2 + 2, mdReader.ManifestResourceTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.NestedClassTable.RowSize);
-                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTable.RowSize);
+                Assert.Equal(4 + 2 + 2, mdReader.GenericParamTableV2_0.RowSize);
                 Assert.Equal(2 + 2, mdReader.MethodSpecTable.RowSize);
                 Assert.Equal(2 + 2, mdReader.GenericParamConstraintTable.RowSize);
                 Assert.Equal(2 + 2 + 2 + 2, mdReader.DocumentTable.RowSize);

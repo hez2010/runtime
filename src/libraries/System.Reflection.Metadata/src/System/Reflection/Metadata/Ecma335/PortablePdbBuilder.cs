@@ -61,7 +61,55 @@ namespace System.Reflection.Metadata.Ecma335
             _entryPoint = entryPoint;
 
             Debug.Assert(BlobUtilities.GetUTF8ByteCount(MetadataVersion) == MetadataVersion.Length);
-            _serializedMetadata = tablesAndHeaps.GetSerializedMetadata(typeSystemRowCounts, MetadataVersion.Length, isStandaloneDebugMetadata: true);
+            _serializedMetadata = tablesAndHeaps.GetSerializedMetadata(new Version(3, 0), typeSystemRowCounts, MetadataVersion.Length, isStandaloneDebugMetadata: true);
+
+            IdProvider = idProvider ?? BlobContentId.GetTimeBasedProvider();
+        }
+
+        /// <summary>
+        /// Creates a builder of a Portable PDB image.
+        /// </summary>
+        /// <param name="tablesAndHeaps">
+        /// Builder populated with debug metadata entities stored in tables and values stored in heaps.
+        /// The entities and values will be enumerated when serializing the Portable PDB image.
+        /// </param>
+        /// <param name="metadataTableVersion">
+        /// Metadata table version
+        /// </param>
+        /// <param name="typeSystemRowCounts">
+        /// Row counts of all tables that the associated type-system metadata contain.
+        /// Each slot in the array corresponds to a table (<see cref="TableIndex"/>).
+        /// The length of the array must be equal to <see cref="MetadataTokens.TableCount"/>.
+        /// </param>
+        /// <param name="entryPoint">
+        /// Entry point method definition handle.
+        /// </param>
+        /// <param name="idProvider">
+        /// Function calculating id of content represented as a sequence of blobs.
+        /// If not specified a default function that ignores the content and returns current time-based content id is used
+        /// (<see cref="BlobContentId.GetTimeBasedProvider()"/>).
+        /// You must specify a deterministic function to produce a deterministic Portable PDB image.
+        /// </param>
+        /// <exception cref="ArgumentNullException"><paramref name="tablesAndHeaps"/> or <paramref name="typeSystemRowCounts"/> is null.</exception>
+        public PortablePdbBuilder(
+            MetadataBuilder tablesAndHeaps,
+            Version metadataTableVersion,
+            ImmutableArray<int> typeSystemRowCounts,
+            MethodDefinitionHandle entryPoint,
+            Func<IEnumerable<Blob>, BlobContentId>? idProvider = null)
+        {
+            if (tablesAndHeaps is null)
+            {
+                Throw.ArgumentNull(nameof(tablesAndHeaps));
+            }
+
+            ValidateTypeSystemRowCounts(typeSystemRowCounts);
+
+            _builder = tablesAndHeaps;
+            _entryPoint = entryPoint;
+
+            Debug.Assert(BlobUtilities.GetUTF8ByteCount(MetadataVersion) == MetadataVersion.Length);
+            _serializedMetadata = tablesAndHeaps.GetSerializedMetadata(metadataTableVersion, typeSystemRowCounts, MetadataVersion.Length, isStandaloneDebugMetadata: true);
 
             IdProvider = idProvider ?? BlobContentId.GetTimeBasedProvider();
         }
@@ -136,7 +184,7 @@ namespace System.Reflection.Metadata.Ecma335
             SerializeStandalonePdbStream(builder);
 
             // #~ or #- stream:
-            _builder.SerializeMetadataTables(builder, _serializedMetadata.Sizes, _serializedMetadata.StringMap, methodBodyStreamRva: 0, mappedFieldDataStreamRva: 0);
+            _builder.SerializeMetadataTables(builder, _serializedMetadata.Version, _serializedMetadata.Sizes, _serializedMetadata.StringMap, methodBodyStreamRva: 0, mappedFieldDataStreamRva: 0);
 
             // #Strings, #US, #Guid and #Blob streams:
             _builder.WriteHeapsTo(builder, _serializedMetadata.StringHeap);

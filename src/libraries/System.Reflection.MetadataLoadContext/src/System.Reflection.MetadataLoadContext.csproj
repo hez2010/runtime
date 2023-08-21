@@ -128,6 +128,7 @@
     <Compile Include="System\Reflection\TypeLoading\Types\RoByRefType.cs" />
     <Compile Include="System\Reflection\TypeLoading\Types\RoConstructedGenericType.cs" />
     <Compile Include="System\Reflection\TypeLoading\Types\RoConstructedGenericType.Key.cs" />
+    <Compile Include="System\Reflection\TypeLoading\Types\RoConstValueType.cs" />
     <Compile Include="System\Reflection\TypeLoading\Types\RoDefinitionType.cs" />
     <Compile Include="System\Reflection\TypeLoading\Types\RoExceptionType.cs" />
     <Compile Include="System\Reflection\TypeLoading\Types\RoFunctionPointerType.cs" />

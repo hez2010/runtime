@@ -47,6 +47,8 @@ namespace System.Reflection.Metadata.Ecma335
         ELEMENT_TYPE_CMOD_REQD = 0x1F,     // required C modifier : E_T_CMOD_REQD <mdTypeRef/mdTypeDef>
         ELEMENT_TYPE_CMOD_OPT = 0x20,     // optional C modifier : E_T_CMOD_OPT <mdTypeRef/mdTypeDef>
 
+        ELEMENT_TYPE_CTARG = 0x22,
+
         ELEMENT_TYPE_HANDLE = 0x40,
         ELEMENT_TYPE_SENTINEL = 0x41, // sentinel for varargs
         ELEMENT_TYPE_PINNED = 0x45,

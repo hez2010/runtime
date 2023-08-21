@@ -853,6 +853,7 @@ namespace System.Reflection.Metadata
         public int Index { get { throw null; } }
         public System.Reflection.Metadata.StringHandle Name { get { throw null; } }
         public System.Reflection.Metadata.EntityHandle Parent { get { throw null; } }
+        public System.Reflection.Metadata.EntityHandle Type { get { throw null; } }
         public System.Reflection.Metadata.GenericParameterConstraintHandleCollection GetConstraints() { throw null; }
         public System.Reflection.Metadata.CustomAttributeHandleCollection GetCustomAttributes() { throw null; }
     }
@@ -1372,6 +1373,7 @@ namespace System.Reflection.Metadata
     }
     public partial interface ISignatureTypeProvider<TType, TGenericContext> : System.Reflection.Metadata.IConstructedTypeProvider<TType>, System.Reflection.Metadata.ISimpleTypeProvider<TType>, System.Reflection.Metadata.ISZArrayTypeProvider<TType>
     {
+        TType GetConstValueType(PrimitiveTypeCode typeCode, ulong value);
         TType GetFunctionPointerType(System.Reflection.Metadata.MethodSignature<TType> signature);
         TType GetGenericMethodParameter(TGenericContext genericContext, int index);
         TType GetGenericTypeParameter(TGenericContext genericContext, int index);
@@ -1653,6 +1655,7 @@ namespace System.Reflection.Metadata
         public int MetadataLength { get { throw null; } }
         public unsafe byte* MetadataPointer { get { throw null; } }
         public string MetadataVersion { get { throw null; } }
+        public System.Version MetadataTableVersion { get { throw null; } }
         public System.Reflection.Metadata.MethodDebugInformationHandleCollection MethodDebugInformation { get { throw null; } }
         public System.Reflection.Metadata.MethodDefinitionHandleCollection MethodDefinitions { get { throw null; } }
         public System.Reflection.Metadata.MetadataReaderOptions Options { get { throw null; } }
@@ -2295,6 +2298,7 @@ namespace System.Reflection.Metadata
         GenericMethodParameter = (byte)30,
         RequiredModifier = (byte)31,
         OptionalModifier = (byte)32,
+        ConstTypeArgument = (byte)34,
         TypeHandle = (byte)64,
         Sentinel = (byte)65,
         Pinned = (byte)69,
@@ -2769,6 +2773,7 @@ namespace System.Reflection.Metadata.Ecma335
         public void AddFieldLayout(System.Reflection.Metadata.FieldDefinitionHandle field, int offset) { }
         public void AddFieldRelativeVirtualAddress(System.Reflection.Metadata.FieldDefinitionHandle field, int offset) { }
         public System.Reflection.Metadata.GenericParameterHandle AddGenericParameter(System.Reflection.Metadata.EntityHandle parent, System.Reflection.GenericParameterAttributes attributes, System.Reflection.Metadata.StringHandle name, int index) { throw null; }
+        public System.Reflection.Metadata.GenericParameterHandle AddGenericParameter(System.Reflection.Metadata.EntityHandle parent, System.Reflection.GenericParameterAttributes attributes, System.Reflection.Metadata.StringHandle name, int index, System.Reflection.Metadata.EntityHandle type) { throw null; }
         public System.Reflection.Metadata.GenericParameterConstraintHandle AddGenericParameterConstraint(System.Reflection.Metadata.GenericParameterHandle genericParameter, System.Reflection.Metadata.EntityHandle constraint) { throw null; }
         public System.Reflection.Metadata.ImportScopeHandle AddImportScope(System.Reflection.Metadata.ImportScopeHandle parentScope, System.Reflection.Metadata.BlobHandle imports) { throw null; }
         public System.Reflection.Metadata.InterfaceImplementationHandle AddInterfaceImplementation(System.Reflection.Metadata.TypeDefinitionHandle type, System.Reflection.Metadata.EntityHandle implementedInterface) { throw null; }
@@ -2832,7 +2837,9 @@ namespace System.Reflection.Metadata.Ecma335
     public sealed partial class MetadataRootBuilder
     {
         public MetadataRootBuilder(System.Reflection.Metadata.Ecma335.MetadataBuilder tablesAndHeaps, string? metadataVersion = null, bool suppressValidation = false) { }
+        public MetadataRootBuilder(System.Reflection.Metadata.Ecma335.MetadataBuilder tablesAndHeaps, System.Version metadataTableVersion, string? metadataVersion = null, bool suppressValidation = false) { }
         public string MetadataVersion { get { throw null; } }
+        public System.Version MetadataTableVersion { get { throw null; } }
         public System.Reflection.Metadata.Ecma335.MetadataSizes Sizes { get { throw null; } }
         public bool SuppressValidation { get { throw null; } }
         public void Serialize(System.Reflection.Metadata.BlobBuilder builder, int methodBodyStreamRva, int mappedFieldDataStreamRva) { }
@@ -2997,6 +3004,7 @@ namespace System.Reflection.Metadata.Ecma335
     public sealed partial class PortablePdbBuilder
     {
         public PortablePdbBuilder(System.Reflection.Metadata.Ecma335.MetadataBuilder tablesAndHeaps, System.Collections.Immutable.ImmutableArray<int> typeSystemRowCounts, System.Reflection.Metadata.MethodDefinitionHandle entryPoint, System.Func<System.Collections.Generic.IEnumerable<System.Reflection.Metadata.Blob>, System.Reflection.Metadata.BlobContentId>? idProvider = null) { }
+        public PortablePdbBuilder(System.Reflection.Metadata.Ecma335.MetadataBuilder tablesAndHeaps, System.Version metadataTableVersion, System.Collections.Immutable.ImmutableArray<int> typeSystemRowCounts, System.Reflection.Metadata.MethodDefinitionHandle entryPoint, System.Func<System.Collections.Generic.IEnumerable<System.Reflection.Metadata.Blob>, System.Reflection.Metadata.BlobContentId>? idProvider = null) { }
         public ushort FormatVersion { get { throw null; } }
         public System.Func<System.Collections.Generic.IEnumerable<System.Reflection.Metadata.Blob>, System.Reflection.Metadata.BlobContentId> IdProvider { get { throw null; } }
         public string MetadataVersion { get { throw null; } }
@@ -3070,6 +3078,7 @@ namespace System.Reflection.Metadata.Ecma335
         public void UInt64() { }
         public void UIntPtr() { }
         public void VoidPointer() { }
+        public void ConstValueType(PrimitiveTypeCode type, ulong value) { }
     }
     public readonly struct SwitchInstructionEncoder
     {

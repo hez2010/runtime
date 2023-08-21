@@ -3,6 +3,7 @@
 
 using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 
 namespace System.Reflection.Metadata.Ecma335
 {
@@ -121,6 +122,9 @@ namespace System.Reflection.Metadata.Ecma335
                 case (int)SignatureTypeCode.GenericMethodParameter:
                     index = blobReader.ReadCompressedInteger();
                     return _provider.GetGenericMethodParameter(_genericContext, index);
+
+                case (int)SignatureTypeCode.ConstTypeArgument:
+                    return DecodeConstTypeArgument(ref blobReader);
 
                 case (int)SignatureTypeKind.Class:
                 case (int)SignatureTypeKind.ValueType:
@@ -293,6 +297,52 @@ namespace System.Reflection.Metadata.Ecma335
             TType unmodifiedType = DecodeType(ref blobReader);
 
             return _provider.GetModifiedType(modifier, unmodifiedType, isRequired);
+        }
+
+        private TType DecodeConstTypeArgument(ref BlobReader blobReader)
+        {
+            int typeCode = blobReader.ReadCompressedInteger();
+            TType elementType;
+            int size = 1;
+
+            switch (typeCode)
+            {
+                case (int)SignatureTypeCode.Boolean:
+                case (int)SignatureTypeCode.SByte:
+                case (int)SignatureTypeCode.Byte:
+                    break;
+                case (int)SignatureTypeCode.Char:
+                case (int)SignatureTypeCode.Int16:
+                case (int)SignatureTypeCode.UInt16:
+                    size <<= 1;
+                    break;
+                case (int)SignatureTypeCode.Int32:
+                case (int)SignatureTypeCode.UInt32:
+                case (int)SignatureTypeCode.Single:
+                    size <<= 1;
+                    break;
+                case (int)SignatureTypeCode.Int64:
+                case (int)SignatureTypeCode.UInt64:
+                case (int)SignatureTypeCode.Double:
+                    size <<= 1;
+                    break;
+
+                default:
+                    throw new BadImageFormatException(SR.Format(SR.UnexpectedSignatureTypeCode, typeCode));
+            }
+
+            elementType = _provider.GetPrimitiveType((PrimitiveTypeCode)typeCode);
+            byte[] rawBytes = blobReader.ReadBytes(size);
+            ulong rawValue = 0;
+            unsafe
+            {
+                fixed (void* ptr = rawBytes)
+                {
+                    Unsafe.Copy(ref rawValue, ptr);
+                }
+            }
+
+            return _provider.GetConstValueType((PrimitiveTypeCode)typeCode, rawValue);
         }
 
         private TType DecodeTypeHandle(ref BlobReader blobReader, byte rawTypeKind, bool allowTypeSpecifications)

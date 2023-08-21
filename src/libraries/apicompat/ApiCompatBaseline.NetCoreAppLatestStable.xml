@@ -32,6 +32,12 @@
     <Right>net8.0/System.Runtime.InteropServices.JavaScript.dll</Right>
   </Suppression>
   <Suppression>
+    <DiagnosticId>CP0006</DiagnosticId>
+    <Target>M:System.Reflection.Metadata.ISimpleTypeProvider`1.GetConstValueType(System.Reflection.Metadata.PrimitiveTypeCode,System.UInt64)</Target>
+    <Left>net7.0/System.Reflection.Metadata.dll</Left>
+    <Right>net8.0/System.Reflection.Metadata.dll</Right>
+  </Suppression>
+  <Suppression>
     <DiagnosticId>CP0014</DiagnosticId>
     <Target>M:System.Console.get_WindowHeight:[T:System.Runtime.Versioning.UnsupportedOSPlatformAttribute]</Target>
     <Left>net7.0/mscorlib.dll</Left>

@@ -14,7 +14,7 @@ namespace System.Reflection.Metadata.Ecma335
     /// </remarks>
     public sealed class MetadataRootBuilder
     {
-        private const string DefaultMetadataVersionString = "v4.0.30319";
+        private const string DefaultMetadataVersionString = "v8.0.42424";
 
         // internal for testing
         internal static readonly ImmutableArray<int> EmptyRowCounts = ImmutableArray.Create(new int[MetadataTokens.TableCount]);
@@ -26,6 +26,11 @@ namespace System.Reflection.Metadata.Ecma335
         /// Metadata version string.
         /// </summary>
         public string MetadataVersion { get; }
+
+        /// <summary>
+        /// Metadata table version
+        /// </summary>
+        public Version MetadataTableVersion { get; }
 
         /// <summary>
         /// True to suppresses basic validation of metadata tables.
@@ -68,8 +73,51 @@ namespace System.Reflection.Metadata.Ecma335
 
             _tablesAndHeaps = tablesAndHeaps;
             MetadataVersion = metadataVersion ?? DefaultMetadataVersionString;
+            MetadataTableVersion = new Version(3, 0);
             SuppressValidation = suppressValidation;
-            _serializedMetadata = tablesAndHeaps.GetSerializedMetadata(EmptyRowCounts, metadataVersionByteCount, isStandaloneDebugMetadata: false);
+            _serializedMetadata = tablesAndHeaps.GetSerializedMetadata(MetadataTableVersion, EmptyRowCounts, metadataVersionByteCount, isStandaloneDebugMetadata: false);
+        }
+
+        /// <summary>
+        /// Creates a builder of a metadata root.
+        /// </summary>
+        /// <param name="tablesAndHeaps">
+        /// Builder populated with metadata entities stored in tables and values stored in heaps.
+        /// The entities and values will be enumerated when serializing the metadata root.
+        /// </param>
+        /// <param name="metadataTableVersion">
+        /// The metadata table version written to the metadata header. The default value is 3.0.
+        /// </param>
+        /// <param name="metadataVersion">
+        /// The version string written to the metadata header. The default value is "v4.0.30319".
+        /// </param>
+        /// <param name="suppressValidation">
+        /// True to suppresses basic validation of metadata tables during serialization.
+        /// The validation verifies that entries in the tables were added in order required by the ECMA specification.
+        /// It does not enforce all specification requirements on metadata tables.
+        /// </param>
+        /// <exception cref="ArgumentNullException"><paramref name="tablesAndHeaps"/> is null.</exception>
+        /// <exception cref="ArgumentException"><paramref name="metadataVersion"/> is too long (the number of bytes when UTF-8 encoded must be less than 255).</exception>
+        public MetadataRootBuilder(MetadataBuilder tablesAndHeaps, Version metadataTableVersion, string? metadataVersion = null, bool suppressValidation = false)
+        {
+            if (tablesAndHeaps is null)
+            {
+                Throw.ArgumentNull(nameof(tablesAndHeaps));
+            }
+
+            Debug.Assert(BlobUtilities.GetUTF8ByteCount(DefaultMetadataVersionString) == DefaultMetadataVersionString.Length);
+            int metadataVersionByteCount = metadataVersion != null ? BlobUtilities.GetUTF8ByteCount(metadataVersion) : DefaultMetadataVersionString.Length;
+
+            if (metadataVersionByteCount > MetadataSizes.MaxMetadataVersionByteCount)
+            {
+                Throw.InvalidArgument(SR.MetadataVersionTooLong, nameof(metadataVersion));
+            }
+
+            _tablesAndHeaps = tablesAndHeaps;
+            MetadataVersion = metadataVersion ?? DefaultMetadataVersionString;
+            MetadataTableVersion = metadataTableVersion;
+            SuppressValidation = suppressValidation;
+            _serializedMetadata = tablesAndHeaps.GetSerializedMetadata(MetadataTableVersion, EmptyRowCounts, metadataVersionByteCount, isStandaloneDebugMetadata: false);
         }
 
         /// <summary>
@@ -120,7 +168,7 @@ namespace System.Reflection.Metadata.Ecma335
             MetadataBuilder.SerializeMetadataHeader(builder, MetadataVersion, _serializedMetadata.Sizes);
 
             // #~ or #- stream:
-            _tablesAndHeaps.SerializeMetadataTables(builder, _serializedMetadata.Sizes, _serializedMetadata.StringMap, methodBodyStreamRva, mappedFieldDataStreamRva);
+            _tablesAndHeaps.SerializeMetadataTables(builder, MetadataTableVersion, _serializedMetadata.Sizes, _serializedMetadata.StringMap, methodBodyStreamRva, mappedFieldDataStreamRva);
 
             // #Strings, #US, #Guid and #Blob streams:
             _tablesAndHeaps.WriteHeapsTo(builder, _serializedMetadata.StringHeap);

@@ -58,5 +58,6 @@ namespace System.Reflection.TypeLoading.Ecma
         public abstract RoType GetPinnedType(RoType elementType);
 
         public RoType GetPrimitiveType(PrimitiveTypeCode typeCode) => _typeProvider.GetPrimitiveType(typeCode);
+        public RoType GetConstValueType(PrimitiveTypeCode typeCode, ulong value) => _typeProvider.GetConstValueType(typeCode, value);
     }
 }

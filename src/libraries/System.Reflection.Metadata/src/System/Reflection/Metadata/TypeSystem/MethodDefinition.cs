@@ -121,7 +121,7 @@ namespace System.Reflection.Metadata
 
         public GenericParameterHandleCollection GetGenericParameters()
         {
-            return _reader.GenericParamTable.FindGenericParametersForMethod(Handle);
+            return _reader.GenericParamTableV2_0.FindGenericParametersForMethod(Handle);
         }
 
         public MethodImport GetImport()

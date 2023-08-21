@@ -3,6 +3,7 @@
 
 using System.Collections.Immutable;
 using System.Reflection.Metadata;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace System.Reflection.TypeLoading.Ecma
@@ -78,6 +79,60 @@ namespace System.Reflection.TypeLoading.Ecma
         {
             typeCode.ToCoreType().GetFullName(out ReadOnlySpan<byte> ns, out ReadOnlySpan<byte> name);
             return ns.ToUtf16() + "." + name.ToUtf16();  // This is not safe for types outside of a namespace, but all primitive types are known to be in "System"
+        }
+
+        public string GetConstValueType(PrimitiveTypeCode typeCode, ulong value)
+        {
+            var builder = new StringBuilder();
+            builder.Append(GetPrimitiveType(typeCode));
+            builder.Append(" (");
+
+            switch (typeCode)
+            {
+                case PrimitiveTypeCode.Boolean:
+                    builder.Append(value == 0 ? "false" : "true");
+                    break;
+                case PrimitiveTypeCode.SByte:
+                    builder.Append(Unsafe.As<ulong, sbyte>(ref value));
+                    break;
+                case PrimitiveTypeCode.Byte:
+                    builder.Append(Unsafe.As<ulong, byte>(ref value));
+                    break;
+                case PrimitiveTypeCode.Char:
+                    builder.Append(Unsafe.As<ulong, char>(ref value));
+                    break;
+                case PrimitiveTypeCode.Int16:
+                    builder.Append(Unsafe.As<ulong, short>(ref value));
+                    break;
+                case PrimitiveTypeCode.UInt16:
+                    builder.Append(Unsafe.As<ulong, ushort>(ref value));
+                    break;
+                case PrimitiveTypeCode.Int32:
+                    builder.Append(Unsafe.As<ulong, int>(ref value));
+                    break;
+                case PrimitiveTypeCode.UInt32:
+                    builder.Append(Unsafe.As<ulong, uint>(ref value));
+                    break;
+                case PrimitiveTypeCode.Int64:
+                    builder.Append(Unsafe.As<ulong, long>(ref value));
+                    break;
+                case PrimitiveTypeCode.UInt64:
+                    builder.Append(value);
+                    break;
+                case PrimitiveTypeCode.Single:
+                    builder.Append(Unsafe.As<ulong, float>(ref value));
+                    break;
+                case PrimitiveTypeCode.Double:
+                    builder.Append(Unsafe.As<ulong, double>(ref value));
+                    break;
+
+                default:
+                    throw new BadImageFormatException(SR.Format(SR.UnexpectedSignatureTypeCode, typeCode));
+            }
+
+            builder.Append(')');
+
+            return builder.ToString();
         }
     }
 }

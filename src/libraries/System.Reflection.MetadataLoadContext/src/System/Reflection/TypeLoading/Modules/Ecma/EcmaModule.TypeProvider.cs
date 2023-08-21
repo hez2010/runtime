@@ -73,5 +73,27 @@ namespace System.Reflection.TypeLoading.Ecma
                 return null!; // This gets hit if the custom attribute passes "(Type)null"
             return Helpers.LoadTypeFromAssemblyQualifiedName(name, GetRoAssembly(), ignoreCase: false, throwOnError: true)!;
         }
+
+        public RoType GetConstValueType(PrimitiveTypeCode typeCode, ulong value)
+        {
+            CoreType coreType = typeCode switch
+            {
+                PrimitiveTypeCode.Boolean => CoreType.Boolean,
+                PrimitiveTypeCode.Byte => CoreType.Byte,
+                PrimitiveTypeCode.SByte => CoreType.SByte,
+                PrimitiveTypeCode.Char => CoreType.Char,
+                PrimitiveTypeCode.UInt16 => CoreType.UInt16,
+                PrimitiveTypeCode.Int16 => CoreType.Int16,
+                PrimitiveTypeCode.UInt32 => CoreType.UInt32,
+                PrimitiveTypeCode.Int32 => CoreType.Int32,
+                PrimitiveTypeCode.UInt64 => CoreType.UInt64,
+                PrimitiveTypeCode.Int64 => CoreType.Int64,
+                PrimitiveTypeCode.Single => CoreType.Single,
+                PrimitiveTypeCode.Double => CoreType.Double,
+                _ => CoreType.Object
+            };
+
+            return Loader.GetConstValueType(coreType, value);
+        }
     }
 }

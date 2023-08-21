@@ -36,7 +36,9 @@ namespace System.Reflection.Metadata
         {
             get
             {
-                return _reader.GenericParamTable.GetOwner(Handle);
+                return _reader.MetadataTableVersion.Major == 2 && _reader.MetadataTableVersion.Minor == 0
+                    ? _reader.GenericParamTableV2_0.GetOwner(Handle)
+                    : _reader.GenericParamTable.GetOwner(Handle);
             }
         }
 
@@ -50,7 +52,9 @@ namespace System.Reflection.Metadata
         {
             get
             {
-                return _reader.GenericParamTable.GetFlags(Handle);
+                return _reader.MetadataTableVersion.Major == 2 && _reader.MetadataTableVersion.Minor == 0
+                    ? _reader.GenericParamTableV2_0.GetFlags(Handle)
+                    : _reader.GenericParamTable.GetFlags(Handle);
             }
         }
 
@@ -64,7 +68,9 @@ namespace System.Reflection.Metadata
         {
             get
             {
-                return _reader.GenericParamTable.GetNumber(Handle);
+                return _reader.MetadataTableVersion.Major == 2 && _reader.MetadataTableVersion.Minor == 0
+                    ? _reader.GenericParamTableV2_0.GetNumber(Handle)
+                    : _reader.GenericParamTable.GetNumber(Handle);
             }
         }
 
@@ -78,7 +84,26 @@ namespace System.Reflection.Metadata
         {
             get
             {
-                return _reader.GenericParamTable.GetName(Handle);
+                return _reader.MetadataTableVersion.Major == 2 && _reader.MetadataTableVersion.Minor == 0
+                    ? _reader.GenericParamTableV2_0.GetName(Handle)
+                    : _reader.GenericParamTable.GetName(Handle);
+            }
+        }
+
+
+        /// <summary>
+        /// The type of the generic parameter.
+        /// </summary>
+        /// <remarks>
+        /// [Not yet] Corresponds to Type field of GenericParam table in ECMA-335 Standard.
+        /// </remarks>
+        public EntityHandle Type
+        {
+            get
+            {
+                return _reader.MetadataTableVersion.Major == 2 && _reader.MetadataTableVersion.Minor == 0
+                    ? default
+                    : _reader.GenericParamTable.GetType(Handle);
             }
         }
 

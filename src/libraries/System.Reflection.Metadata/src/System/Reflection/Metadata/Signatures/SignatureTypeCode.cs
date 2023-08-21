@@ -16,7 +16,7 @@ namespace System.Reflection.Metadata
         Invalid = 0x0,
 
         /// <summary>
-        /// Represents <see cref="System.Void"/> in signatures.
+        /// Represents <see cref="void"/> in signatures.
         /// </summary>
         Void = CorElementType.ELEMENT_TYPE_VOID,
 
@@ -122,12 +122,12 @@ namespace System.Reflection.Metadata
         TypedReference = CorElementType.ELEMENT_TYPE_TYPEDBYREF,       // TYPEDREF  (it takes no args) a typed reference to some other type
 
         /// <summary>
-        /// Represents a <see cref="System.IntPtr"/> in signatures.
+        /// Represents a <see cref="nint"/> in signatures.
         /// </summary>
         IntPtr = CorElementType.ELEMENT_TYPE_I,
 
         /// <summary>
-        /// Represents a <see cref="System.UIntPtr"/> in signatures.
+        /// Represents a <see cref="nuint"/> in signatures.
         /// </summary>
         UIntPtr = CorElementType.ELEMENT_TYPE_U,
 
@@ -184,5 +184,10 @@ namespace System.Reflection.Metadata
         /// Represents a local variable that is pinned by garbage collector
         /// </summary>
         Pinned = CorElementType.ELEMENT_TYPE_PINNED,
+
+        /// <summary>
+        /// Represents a const type argument
+        /// </summary>
+        ConstTypeArgument = CorElementType.ELEMENT_TYPE_CTARG,
     }
 }

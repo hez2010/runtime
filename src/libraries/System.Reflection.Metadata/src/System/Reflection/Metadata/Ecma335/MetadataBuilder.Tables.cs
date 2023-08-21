@@ -10,9 +10,6 @@ namespace System.Reflection.Metadata.Ecma335
 {
     public partial class MetadataBuilder
     {
-        private const byte MetadataFormatMajorVersion = 2;
-        private const byte MetadataFormatMinorVersion = 0;
-
         // type system table rows:
         private struct AssemblyRefTableRow { public Version Version; public BlobHandle PublicKeyToken; public StringHandle Name; public StringHandle Culture; public uint Flags; public BlobHandle HashValue; }
         private struct ModuleRow { public ushort Generation; public StringHandle Name; public GuidHandle ModuleVersionId; public GuidHandle EncId; public GuidHandle EncBaseId; }
@@ -32,7 +29,7 @@ namespace System.Reflection.Metadata.Ecma335
         private struct FieldDefRow { public ushort Flags; public StringHandle Name; public BlobHandle Signature; }
         private struct FileTableRow { public uint Flags; public StringHandle FileName; public BlobHandle HashValue; }
         private struct GenericParamConstraintRow { public int Owner; public int Constraint; }
-        private struct GenericParamRow { public ushort Number; public ushort Flags; public int Owner; public StringHandle Name; }
+        private struct GenericParamRow { public ushort Number; public ushort Flags; public int Owner; public StringHandle Name; public int Type; }
         private struct ImplMapRow { public ushort MappingFlags; public int MemberForwarded; public StringHandle ImportName; public int ImportScope; }
         private struct InterfaceImplRow { public int Class; public int Interface; }
         private struct ManifestResourceRow { public uint Offset; public uint Flags; public StringHandle Name; public int Implementation; }
@@ -842,7 +839,45 @@ namespace System.Reflection.Metadata.Ecma335
                 Flags = unchecked((ushort)attributes),
                 Name = name,
                 Number = (ushort)index,
-                Owner = CodedIndex.TypeOrMethodDef(parent)
+                Owner = CodedIndex.TypeOrMethodDef(parent),
+            });
+
+            return GenericParameterHandle.FromRowId(_genericParamTable.Count);
+        }
+
+        /// <summary>
+        /// Adds a generic parameter definition.
+        /// </summary>
+        /// <param name="parent">Parent entity handle: <see cref="TypeDefinitionHandle"/> or <see cref="MethodDefinitionHandle"/></param>
+        /// <param name="attributes">Attributes.</param>
+        /// <param name="name">Parameter name.</param>
+        /// <param name="index">Zero-based parameter index.</param>
+        /// <param name="type">Type entity handle: <see cref="TypeReferenceHandle"/> or <see cref="TypeSpecificationHandle"/></param>
+        /// <remarks>
+        /// Generic parameters must be added in an order determined by the coded index of their parent entity (<see cref="CodedIndex.TypeOrMethodDef"/>).
+        /// Generic parameters with the same parent must be ordered by their <paramref name="index"/>.
+        /// </remarks>
+        /// <exception cref="ArgumentException"><paramref name="parent"/> doesn't have the expected handle kind.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is greater than <see cref="ushort.MaxValue"/>.</exception>
+        public GenericParameterHandle AddGenericParameter(
+            EntityHandle parent,
+            GenericParameterAttributes attributes,
+            StringHandle name,
+            int index,
+            EntityHandle type)
+        {
+            if (unchecked((uint)index) > ushort.MaxValue)
+            {
+                Throw.ArgumentOutOfRange(nameof(index));
+            }
+
+            _genericParamTable.Add(new GenericParamRow
+            {
+                Flags = unchecked((ushort)attributes),
+                Name = name,
+                Number = (ushort)index,
+                Owner = CodedIndex.TypeOrMethodDef(parent),
+                Type = CodedIndex.TypeDefOrRefOrSpec(type),
             });
 
             return GenericParameterHandle.FromRowId(_genericParamTable.Count);
@@ -1635,6 +1670,7 @@ namespace System.Reflection.Metadata.Ecma335
 
         internal void SerializeMetadataTables(
             BlobBuilder writer,
+            Version version,
             MetadataSizes metadataSizes,
             ImmutableArray<int> stringMap,
             int methodBodyStreamRva,
@@ -1642,7 +1678,7 @@ namespace System.Reflection.Metadata.Ecma335
         {
             int startPosition = writer.Count;
 
-            SerializeTablesHeader(writer, metadataSizes);
+            SerializeTablesHeader(writer, version, metadataSizes);
 
             if (metadataSizes.IsPresent(TableIndex.Module))
             {
@@ -1811,7 +1847,7 @@ namespace System.Reflection.Metadata.Ecma335
 
             if (metadataSizes.IsPresent(TableIndex.GenericParam))
             {
-                SerializeGenericParamTable(writer, stringMap, metadataSizes);
+                SerializeGenericParamTable(writer, version, stringMap, metadataSizes);
             }
 
             if (metadataSizes.IsPresent(TableIndex.MethodSpec))
@@ -1872,7 +1908,7 @@ namespace System.Reflection.Metadata.Ecma335
             Debug.Assert(metadataSizes.MetadataTableStreamSize == endPosition - startPosition);
         }
 
-        private static void SerializeTablesHeader(BlobBuilder writer, MetadataSizes metadataSizes)
+        private static void SerializeTablesHeader(BlobBuilder writer, Version version, MetadataSizes metadataSizes)
         {
             int startPosition = writer.Count;
 
@@ -1903,8 +1939,8 @@ namespace System.Reflection.Metadata.Ecma335
             ulong sortedTables = sortedDebugTables | (metadataSizes.IsStandaloneDebugMetadata ? 0UL : 0x16003301fa00);
 
             writer.WriteUInt32(0); // reserved
-            writer.WriteByte(MetadataFormatMajorVersion);
-            writer.WriteByte(MetadataFormatMinorVersion);
+            writer.WriteByte((byte)version.Major);
+            writer.WriteByte((byte)version.Minor);
             writer.WriteByte((byte)heapSizes);
             writer.WriteByte(1); // reserved
             writer.WriteUInt64(metadataSizes.PresentTablesMask);
@@ -2284,7 +2320,7 @@ namespace System.Reflection.Metadata.Ecma335
             }
         }
 
-        private void SerializeGenericParamTable(BlobBuilder writer, ImmutableArray<int> stringMap, MetadataSizes metadataSizes)
+        private void SerializeGenericParamTable(BlobBuilder writer, Version version, ImmutableArray<int> stringMap, MetadataSizes metadataSizes)
         {
             foreach (GenericParamRow genericParam in _genericParamTable)
             {
@@ -2292,6 +2328,10 @@ namespace System.Reflection.Metadata.Ecma335
                 writer.WriteUInt16(genericParam.Flags);
                 writer.WriteReference(genericParam.Owner, metadataSizes.TypeOrMethodDefCodedIndexIsSmall);
                 writer.WriteReference(SerializeHandle(stringMap, genericParam.Name), metadataSizes.StringReferenceIsSmall);
+                if (version.Major >= 3)
+                {
+                    writer.WriteReference(genericParam.Type, metadataSizes.TypeDefOrRefCodedIndexIsSmall);
+                }
             }
         }
 

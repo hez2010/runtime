@@ -2382,6 +2382,124 @@ namespace System.Reflection.Metadata.Ecma335
         internal readonly int NumberOfRows;
         private readonly bool _IsTypeOrMethodDefRefSizeSmall;
         private readonly bool _IsStringHeapRefSizeSmall;
+        private readonly bool _IsTypeDefOrRefRefSizeSmall;
+        private readonly int _NumberOffset;
+        private readonly int _FlagsOffset;
+        private readonly int _OwnerOffset;
+        private readonly int _TypeOffset;
+        private readonly int _NameOffset;
+        internal readonly int RowSize;
+        internal readonly MemoryBlock Block;
+
+        internal GenericParamTableReader(
+            int numberOfRows,
+            bool declaredSorted,
+            int typeOrMethodDefRefSize,
+            int typeDefOrRefRefSize,
+            int stringHeapRefSize,
+            MemoryBlock containingBlock,
+            int containingBlockOffset)
+        {
+            this.NumberOfRows = numberOfRows;
+            _IsTypeOrMethodDefRefSizeSmall = typeOrMethodDefRefSize == 2;
+            _IsTypeDefOrRefRefSizeSmall = typeDefOrRefRefSize == 2;
+            _IsStringHeapRefSizeSmall = stringHeapRefSize == 2;
+
+            _NumberOffset = 0;
+            _FlagsOffset = _NumberOffset + sizeof(ushort);
+            _OwnerOffset = _FlagsOffset + sizeof(ushort);
+            _NameOffset = _OwnerOffset + typeOrMethodDefRefSize;
+            _TypeOffset = _NameOffset + stringHeapRefSize;
+            this.RowSize = _TypeOffset + typeDefOrRefRefSize;
+            this.Block = containingBlock.GetMemoryBlockAt(containingBlockOffset, this.RowSize * numberOfRows);
+
+            if (!declaredSorted && !CheckSorted())
+            {
+                Throw.TableNotSorted(TableIndex.GenericParam);
+            }
+        }
+
+        internal ushort GetNumber(GenericParameterHandle handle)
+        {
+            int rowOffset = (handle.RowId - 1) * this.RowSize;
+            return this.Block.PeekUInt16(rowOffset + _NumberOffset);
+        }
+
+        internal GenericParameterAttributes GetFlags(GenericParameterHandle handle)
+        {
+            int rowOffset = (handle.RowId - 1) * this.RowSize;
+            return (GenericParameterAttributes)this.Block.PeekUInt16(rowOffset + _FlagsOffset);
+        }
+
+        internal EntityHandle GetType(GenericParameterHandle handle)
+        {
+            int rowOffset = (handle.RowId - 1) * this.RowSize;
+            return TypeDefOrRefTag.ConvertToHandle(this.Block.PeekTaggedReference(rowOffset + _TypeOffset, _IsTypeDefOrRefRefSizeSmall));
+        }
+
+        internal StringHandle GetName(GenericParameterHandle handle)
+        {
+            int rowOffset = (handle.RowId - 1) * this.RowSize;
+            return StringHandle.FromOffset(this.Block.PeekHeapReference(rowOffset + _NameOffset, _IsStringHeapRefSizeSmall));
+        }
+
+        internal EntityHandle GetOwner(GenericParameterHandle handle)
+        {
+            int rowOffset = (handle.RowId - 1) * this.RowSize;
+            return TypeOrMethodDefTag.ConvertToHandle(this.Block.PeekTaggedReference(rowOffset + _OwnerOffset, _IsTypeOrMethodDefRefSizeSmall));
+        }
+
+        internal GenericParameterHandleCollection FindGenericParametersForType(TypeDefinitionHandle typeDef)
+        {
+            ushort count = 0;
+            uint searchCodedTag = TypeOrMethodDefTag.ConvertTypeDefRowIdToTag(typeDef);
+            int startRid = this.BinarySearchTag(searchCodedTag, ref count);
+
+            return new GenericParameterHandleCollection(startRid, count);
+        }
+
+        internal GenericParameterHandleCollection FindGenericParametersForMethod(MethodDefinitionHandle methodDef)
+        {
+            ushort count = 0;
+            uint searchCodedTag = TypeOrMethodDefTag.ConvertMethodDefToTag(methodDef);
+            int startRid = this.BinarySearchTag(searchCodedTag, ref count);
+
+            return new GenericParameterHandleCollection(startRid, count);
+        }
+
+        private int BinarySearchTag(uint searchCodedTag, ref ushort genericParamCount)
+        {
+            int startRowNumber, endRowNumber;
+            this.Block.BinarySearchReferenceRange(
+                this.NumberOfRows,
+                this.RowSize,
+                _OwnerOffset,
+                searchCodedTag,
+                _IsTypeOrMethodDefRefSizeSmall,
+                out startRowNumber,
+                out endRowNumber);
+
+            if (startRowNumber == -1)
+            {
+                genericParamCount = 0;
+                return 0;
+            }
+
+            genericParamCount = (ushort)(endRowNumber - startRowNumber + 1);
+            return startRowNumber + 1;
+        }
+
+        private bool CheckSorted()
+        {
+            return this.Block.IsOrderedByReferenceAscending(this.RowSize, _OwnerOffset, _IsTypeOrMethodDefRefSizeSmall);
+        }
+    }
+
+    internal readonly struct GenericParamTableReaderV2_0
+    {
+        internal readonly int NumberOfRows;
+        private readonly bool _IsTypeOrMethodDefRefSizeSmall;
+        private readonly bool _IsStringHeapRefSizeSmall;
         private readonly int _NumberOffset;
         private readonly int _FlagsOffset;
         private readonly int _OwnerOffset;
@@ -2389,7 +2507,7 @@ namespace System.Reflection.Metadata.Ecma335
         internal readonly int RowSize;
         internal readonly MemoryBlock Block;
 
-        internal GenericParamTableReader(
+        internal GenericParamTableReaderV2_0(
             int numberOfRows,
             bool declaredSorted,
             int typeOrMethodDefRefSize,

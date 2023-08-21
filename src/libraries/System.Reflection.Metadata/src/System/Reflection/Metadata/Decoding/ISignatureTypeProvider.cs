@@ -6,6 +6,14 @@ namespace System.Reflection.Metadata
     public interface ISignatureTypeProvider<TType, TGenericContext> : ISimpleTypeProvider<TType>, IConstructedTypeProvider<TType>
     {
         /// <summary>
+        /// Gets the type symbol for a const value type.
+        /// </summary>
+        /// <param name="typeCode"></param>
+        /// <param name="value"></param>
+        /// <returns></returns>
+        TType GetConstValueType(PrimitiveTypeCode typeCode, ulong value);
+
+        /// <summary>
         /// Gets the a type symbol for the function pointer type of the given method signature.
         /// </summary>
         TType GetFunctionPointerType(MethodSignature<TType> signature);

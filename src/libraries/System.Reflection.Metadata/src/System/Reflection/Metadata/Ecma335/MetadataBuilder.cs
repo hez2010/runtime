@@ -9,7 +9,7 @@ namespace System.Reflection.Metadata.Ecma335
 {
     public sealed partial class MetadataBuilder
     {
-        internal SerializedMetadata GetSerializedMetadata(ImmutableArray<int> externalRowCounts, int metadataVersionByteCount, bool isStandaloneDebugMetadata)
+        internal SerializedMetadata GetSerializedMetadata(Version version, ImmutableArray<int> externalRowCounts, int metadataVersionByteCount, bool isStandaloneDebugMetadata)
         {
             var stringHeapBuilder = new HeapBlobBuilder(_stringHeapCapacity);
             var stringMap = SerializeStringHeap(stringHeapBuilder, _strings, _stringHeapStartOffset);
@@ -27,7 +27,7 @@ namespace System.Reflection.Metadata.Ecma335
 
             var sizes = new MetadataSizes(GetRowCounts(), externalRowCounts, heapSizes, metadataVersionByteCount, isStandaloneDebugMetadata);
 
-            return new SerializedMetadata(sizes, stringHeapBuilder, stringMap);
+            return new SerializedMetadata(sizes, version, stringHeapBuilder, stringMap);
         }
 
         internal static void SerializeMetadataHeader(BlobBuilder builder, string metadataVersion, MetadataSizes sizes)

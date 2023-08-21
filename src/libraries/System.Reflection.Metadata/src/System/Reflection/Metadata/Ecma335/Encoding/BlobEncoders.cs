@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Immutable;
+using System.Runtime.CompilerServices;
 
 namespace System.Reflection.Metadata.Ecma335
 {
@@ -971,11 +972,11 @@ namespace System.Reflection.Metadata.Ecma335
         /// </summary>
         public void TypedReference() => WriteTypeCode(SignatureTypeCode.TypedReference);
         /// <summary>
-        /// Encodes <see cref="System.IntPtr"/>.
+        /// Encodes <see cref="nint"/>.
         /// </summary>
         public void IntPtr() => WriteTypeCode(SignatureTypeCode.IntPtr);
         /// <summary>
-        /// Encodes <see cref="System.UIntPtr"/>.
+        /// Encodes <see cref="nuint"/>.
         /// </summary>
         public void UIntPtr() => WriteTypeCode(SignatureTypeCode.UIntPtr);
         /// <summary>
@@ -1168,6 +1169,51 @@ namespace System.Reflection.Metadata.Ecma335
 
             Builder.WriteByte((byte)SignatureTypeCode.GenericTypeParameter);
             Builder.WriteCompressedInteger(parameterIndex);
+        }
+
+        public void ConstValueType(PrimitiveTypeCode type, ulong value)
+        {
+            Builder.WriteByte((byte)SignatureTypeCode.ConstTypeArgument);
+            Builder.WriteCompressedInteger((int)type);
+            byte[] buffer;
+
+            unsafe
+            {
+                fixed (void* ptr = buffer)
+                {
+                    switch (type)
+                    {
+                        case PrimitiveTypeCode.Boolean:
+                        case PrimitiveTypeCode.Byte:
+                        case PrimitiveTypeCode.SByte:
+                            buffer = new byte[1];
+                            Unsafe.Copy(ptr, ref Unsafe.As<ulong, byte>(ref value));
+                            break;
+                        case PrimitiveTypeCode.Char:
+                        case PrimitiveTypeCode.Int16:
+                        case PrimitiveTypeCode.UInt16:
+                            buffer = new byte[2];
+                            Unsafe.Copy(ptr, ref Unsafe.As<ulong, ushort>(ref value));
+                            break;
+                        case PrimitiveTypeCode.Int32:
+                        case PrimitiveTypeCode.UInt32:
+                        case PrimitiveTypeCode.Single:
+                            buffer = new byte[4];
+                            Unsafe.Copy(ptr, ref Unsafe.As<ulong, uint>(ref value));
+                            break;
+                        case PrimitiveTypeCode.Int64:
+                        case PrimitiveTypeCode.UInt64:
+                        case PrimitiveTypeCode.Double:
+                            buffer = new byte[8];
+                            Unsafe.Copy(ptr, ref value);
+                            break;
+
+                        default:
+                            Throw.ArgumentOutOfRange(nameof(type));
+                            return;
+                    }
+                }
+            }
         }
 
         /// <summary>

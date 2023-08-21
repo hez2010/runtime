@@ -294,7 +294,7 @@ namespace System.Reflection.Metadata.Ecma335.Tests
         public void Heaps_Empty()
         {
             var mdBuilder = new MetadataBuilder();
-            var serialized = mdBuilder.GetSerializedMetadata(MetadataRootBuilder.EmptyRowCounts, 12, isStandaloneDebugMetadata: false);
+            var serialized = mdBuilder.GetSerializedMetadata(new Version(2, 0), MetadataRootBuilder.EmptyRowCounts, 12, isStandaloneDebugMetadata: false);
 
             var builder = new BlobBuilder();
             mdBuilder.WriteHeapsTo(builder, serialized.StringHeap);
@@ -340,7 +340,7 @@ namespace System.Reflection.Metadata.Ecma335.Tests
             var b1 = mdBuilder.GetOrAddBlob(new byte[] { 1, 2 });
             Assert.Equal(1, b1.GetHeapOffset());
 
-            var serialized = mdBuilder.GetSerializedMetadata(MetadataRootBuilder.EmptyRowCounts, 12, isStandaloneDebugMetadata: false);
+            var serialized = mdBuilder.GetSerializedMetadata(new Version(2, 0), MetadataRootBuilder.EmptyRowCounts, 12, isStandaloneDebugMetadata: false);
 
             Assert.Equal(0, MetadataBuilder.SerializeHandle(g0));
             Assert.Equal(1, MetadataBuilder.SerializeHandle(g1));
@@ -387,7 +387,7 @@ namespace System.Reflection.Metadata.Ecma335.Tests
             mdBuilder.GetOrAddDocumentName("\ud800"); // unpaired surrogate
             mdBuilder.GetOrAddDocumentName("\0");
 
-            var serialized = mdBuilder.GetSerializedMetadata(MetadataRootBuilder.EmptyRowCounts, 12, isStandaloneDebugMetadata: false);
+            var serialized = mdBuilder.GetSerializedMetadata(new Version(2, 0), MetadataRootBuilder.EmptyRowCounts, 12, isStandaloneDebugMetadata: false);
 
             var heaps = new BlobBuilder();
             mdBuilder.WriteHeapsTo(heaps, serialized.StringHeap);
@@ -537,7 +537,7 @@ namespace System.Reflection.Metadata.Ecma335.Tests
             var b1 = mdBuilder.GetOrAddBlob(new byte[] { 1, 2 });
             Assert.Equal(0x31, b1.GetHeapOffset());
 
-            var serialized = mdBuilder.GetSerializedMetadata(MetadataRootBuilder.EmptyRowCounts, 12, isStandaloneDebugMetadata: false);
+            var serialized = mdBuilder.GetSerializedMetadata(new Version(2, 0), MetadataRootBuilder.EmptyRowCounts, 12, isStandaloneDebugMetadata: false);
 
             Assert.Equal(5, MetadataBuilder.SerializeHandle(g));
             Assert.Equal(0, MetadataBuilder.SerializeHandle(serialized.StringMap, s0));
@@ -585,7 +585,7 @@ namespace System.Reflection.Metadata.Ecma335.Tests
             Assert.Equal(MetadataTokens.GuidHandle(1), guid.Handle);
             Assert.Equal(MetadataTokens.UserStringHandle(1), us.Handle);
 
-            var serialized = mdBuilder.GetSerializedMetadata(MetadataRootBuilder.EmptyRowCounts, 12, isStandaloneDebugMetadata: false);
+            var serialized = mdBuilder.GetSerializedMetadata(new Version(2, 0), MetadataRootBuilder.EmptyRowCounts, 12, isStandaloneDebugMetadata: false);
 
             var builder = new BlobBuilder();
             mdBuilder.WriteHeapsTo(builder, serialized.StringHeap);

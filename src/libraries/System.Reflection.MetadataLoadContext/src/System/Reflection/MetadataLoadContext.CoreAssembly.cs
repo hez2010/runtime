@@ -4,6 +4,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Reflection.TypeLoading;
+using System.Runtime.CompilerServices;
 
 namespace System.Reflection
 {
@@ -59,6 +60,29 @@ namespace System.Reflection
             CoreTypes coreTypes = GetAllFoundCoreTypes();
             RoType? t = TryGetCoreType(coreType);
             return t ?? throw coreTypes.GetException(coreType)!;
+        }
+
+        internal RoType GetConstValueType(CoreType typeCode, ulong value)
+        {
+            object? boxedValue = typeCode switch
+            {
+                CoreType.Boolean => Unsafe.As<ulong, bool>(ref value),
+                CoreType.Byte => Unsafe.As<ulong, byte>(ref value),
+                CoreType.SByte => Unsafe.As<ulong, sbyte>(ref value),
+                CoreType.Char => Unsafe.As<ulong, char>(ref value),
+                CoreType.UInt16 => Unsafe.As<ulong, ushort>(ref value),
+                CoreType.Int16 => Unsafe.As<ulong, short>(ref value),
+                CoreType.UInt32 => Unsafe.As<ulong, uint>(ref value),
+                CoreType.Int32 => Unsafe.As<ulong, int>(ref value),
+                CoreType.UInt64 => Unsafe.As<ulong, ulong>(ref value),
+                CoreType.Int64 => Unsafe.As<ulong, long>(ref value),
+                CoreType.Single => Unsafe.As<ulong, float>(ref value),
+                CoreType.Double => Unsafe.As<ulong, double>(ref value),
+                _ => null
+            };
+
+            RoType type = GetCoreType(typeCode);
+            return new RoConstValueType(type.GetRoModule(), boxedValue, type);
         }
 
         /// <summary>

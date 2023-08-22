@@ -2005,8 +2005,8 @@ namespace System.Reflection.Metadata.Tests
         [Fact]
         public void ValidateGenericParamTable()
         {
-            // AppCS - 7
-            var expNames = new string[] { "T", "U", "T", "V", "T", "U", "W" };
+            // AppConstGenerics - 7
+            var expNames = new string[] { "T", "U", "T", "T", "V", "U", "W" };
             var expFlags = new GenericParameterAttributes[]
             {
                 /* 0 */ GenericParameterAttributes.None,
@@ -2017,19 +2017,19 @@ namespace System.Reflection.Metadata.Tests
                 /* 0 */ GenericParameterAttributes.None,
                 /* 0 */ GenericParameterAttributes.None,
             };
-            var expNumber = new ushort[] { 0, 1, 0, 1, 0, 0, 1 };
-            var expOwnerTokens = new int[] { 0x06000003, 0x06000003, 0x02000004, 0x02000004, 0x06000004, 0x06000006, 0x06000006, };
+            var expNumber = new ushort[] { 0, 1, 0, 0, 1, 0, 1 };
+            var expOwnerTokens = new int[] { 0x06000001, 0x06000001, 0x06000002, 0x02000003, 0x02000003, 0x06000004, 0x06000004, };
             var expTypeKinds = new HandleKind[]
             {
                 HandleKind.TypeDefinition,
                 HandleKind.TypeSpecification,
                 HandleKind.TypeDefinition,
-                HandleKind.TypeSpecification,
                 HandleKind.TypeDefinition,
+                HandleKind.TypeSpecification,
                 HandleKind.TypeDefinition,
                 HandleKind.TypeSpecification
             };
-            var expTypeTokens = new int[] { 0x2000000, 0x1B000003, 0x2000000, 0x1B000005, 0x2000000, 0x2000000, 0x1B000003, };
+            var expTypeTokens = new int[] { 0x2000000, 0x1B000001, 0x2000000, 0x2000000, 0x1B000004, 0x2000000, 0x1B000001, };
 
             var reader = GetMetadataReader(NetModule.AppConstGenerics);
 

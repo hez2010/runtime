@@ -559,6 +559,30 @@ OBJECTREF FnPtrTypeDesc::GetManagedClassObject()
 
 #endif // #ifndef DACCESS_COMPILE
 
+#ifndef DACCESS_COMPILE
+
+OBJECTREF ConstValueTypeDesc::GetManagedClassObject()
+{
+    CONTRACTL {
+        THROWS;
+        GC_TRIGGERS;
+        MODE_COOPERATIVE;
+
+        INJECT_FAULT(COMPlusThrowOM());
+
+        PRECONDITION(GetInternalCorElementType() == ELEMENT_TYPE_CTARG);
+    }
+    CONTRACTL_END;
+
+    if (m_hExposedClassObject == NULL)
+    {
+        TypeHandle(this).AllocateManagedClassObject(&m_hExposedClassObject);
+    }
+    return GetManagedClassObjectIfExists();
+}
+
+#endif // #ifndef DACCESS_COMPILE
+
 BOOL TypeDesc::IsRestored()
 {
     STATIC_CONTRACT_NOTHROW;
@@ -769,6 +793,44 @@ TypeHandle TypeVarTypeDesc::LoadOwnerType()
             ClassLoader::PermitUninstDefOrRef);
     }
     return genericType;
+}
+
+
+TypeHandle TypeVarTypeDesc::LoadTypeType()
+{
+    CONTRACTL
+    {
+        THROWS;
+        GC_TRIGGERS;
+        MODE_ANY;
+
+        PRECONDITION(RidFromToken(m_type));
+    }
+    CONTRACTL_END;
+    
+    SigTypeContext typeContext = SigTypeContext();
+
+    if (TypeFromToken(m_type) == mdtTypeSpec)
+    {
+        switch (TypeFromToken(m_typeOrMethodDef))
+        {
+            case mdtTypeDef:
+                SigTypeContext::InitTypeContext(LoadOwnerType(), &typeContext);
+                break;
+            case mdtMethodDef:
+                SigTypeContext::InitTypeContext(LoadOwnerMethod(), &typeContext);
+                break;
+            default:
+                _ASSERTE(!"unreachable");
+                break;
+        }
+    }
+
+    TypeHandle type = ClassLoader::LoadTypeDefOrRefOrSpecThrowing(GetModule(), m_type, &typeContext,
+        ClassLoader::ThrowIfNotFound,
+        ClassLoader::PermitUninstDefOrRef);
+
+    return type;
 }
 
 TypeHandle* TypeVarTypeDesc::GetCachedConstraints(DWORD *pNumConstraints)

@@ -172,6 +172,11 @@ FCFuncStart(gCOMTypeHandleFuncs)
 #endif // FEATURE_COMINTEROP
     FCFuncElement("CompareCanonicalHandles", RuntimeTypeHandle::CompareCanonicalHandles)
     FCFuncElement("IsEquivalentTo", RuntimeTypeHandle::IsEquivalentTo)
+    FCFuncElement("GetConstValue", RuntimeTypeHandle::GetConstValue)
+    FCFuncElement("GetConstValueType", RuntimeTypeHandle::GetConstValueType)
+    FCFuncElement("IsConstValueParameter", RuntimeTypeHandle::IsConstValueParameter)
+    FCFuncElement("GetConstValueParameterType", RuntimeTypeHandle::GetConstValueParameterType)
+    FCFuncElement("MakeConstValueType", RuntimeTypeHandle::MakeConstValueType)
 FCFuncEnd()
 
 FCFuncStart(gMetaDataImport)

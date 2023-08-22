@@ -120,5 +120,10 @@ namespace System
                 return _value == new IntPtr(0);
             }
         }
+
+        internal static Type MakeConstValueType(object value)
+        {
+            throw new NotSupportedException(value.ToString());
+        }
     }
 }

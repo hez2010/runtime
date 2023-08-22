@@ -135,6 +135,27 @@ namespace System
             return corElemType == CorElementType.ELEMENT_TYPE_FNPTR;
         }
 
+        internal static bool IsConstValue(RuntimeType type)
+        {
+            CorElementType corElemType = GetCorElementType(type);
+            return corElemType == CorElementType.ELEMENT_TYPE_CTARG;
+        }
+
+        [MethodImpl(MethodImplOptions.InternalCall)]
+        internal static extern RuntimeType GetConstValueType(RuntimeType type);
+
+        [MethodImpl(MethodImplOptions.InternalCall)]
+        internal static extern object GetConstValue(RuntimeType type);
+
+        [MethodImpl(MethodImplOptions.InternalCall)]
+        internal static extern bool IsConstValueParameter(RuntimeType type);
+
+        [MethodImpl(MethodImplOptions.InternalCall)]
+        internal static extern RuntimeType GetConstValueParameterType(RuntimeType type);
+
+        [MethodImpl(MethodImplOptions.InternalCall)]
+        internal static extern RuntimeType MakeConstValueType(object value);
+
         internal static bool HasElementType(RuntimeType type)
         {
             CorElementType corElemType = GetCorElementType(type);

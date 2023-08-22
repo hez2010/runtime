@@ -47,6 +47,8 @@ namespace System
         public virtual bool IsGenericMethodParameter => IsGenericParameter && DeclaringMethod != null;
         public virtual bool IsGenericType => false;
         public virtual bool IsGenericTypeDefinition => false;
+        public virtual bool IsConstValueParameter => false;
+        public virtual bool IsConstValue => false;
 
         public virtual bool IsSZArray => throw NotImplemented.ByDesign;
         public virtual bool IsVariableBoundArray => IsArray && !IsSZArray;
@@ -117,6 +119,9 @@ namespace System
         protected abstract bool IsPrimitiveImpl();
         public bool IsValueType { [Intrinsic] get => IsValueTypeImpl(); }
         protected virtual bool IsValueTypeImpl() => IsSubclassOf(typeof(ValueType));
+        public virtual Type ConstValueParameterType => throw new InvalidOperationException();
+        public virtual Type ConstValueType => throw new InvalidOperationException();
+        public virtual object ConstValue => throw new InvalidOperationException();
 
         [Intrinsic]
         public bool IsAssignableTo([NotNullWhen(true)] Type? targetType) => targetType?.IsAssignableFrom(this) ?? false;
@@ -618,6 +623,8 @@ namespace System
             ArgumentOutOfRangeException.ThrowIfNegative(position);
             return new SignatureGenericMethodParameterType(position);
         }
+
+        public static Type MakeConstValueType(object value) => RuntimeTypeHandle.MakeConstValueType(value);
 
         // This is used by the ToString() overrides of all reflection types. The legacy behavior has the following problems:
         //  1. Use only Name for nested types, which can be confused with global types and generic parameters of the same name.

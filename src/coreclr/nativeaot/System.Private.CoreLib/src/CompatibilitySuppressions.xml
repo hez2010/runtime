@@ -1,5 +1,10 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
+<!-- https://learn.microsoft.com/en-us/dotnet/fundamentals/package-validation/diagnostic-ids -->
 <Suppressions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <Suppression>
+    <DiagnosticId>CP0001</DiagnosticId>
+    <Target>T:Internal.Console</Target>
+  </Suppression>
   <Suppression>
     <DiagnosticId>CP0001</DiagnosticId>
     <Target>T:Internal.DeveloperExperience.DeveloperExperience</Target>
@@ -874,6 +879,10 @@
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0001</DiagnosticId>
+    <Target>T:System.Runtime.CompilerServices.ICastable</Target>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0001</DiagnosticId>
     <Target>T:System.Runtime.CompilerServices.StaticClassConstructionContext</Target>
   </Suppression>
   <Suppression>
@@ -938,6 +947,14 @@
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
+    <Target>F:System.Resources.ResourceManager.BaseNameField</Target>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>F:System.Resources.ResourceSet.Reader</Target>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:System.ModuleHandle.#ctor(System.Reflection.Module)</Target>
   </Suppression>
   <Suppression>
@@ -951,6 +968,42 @@
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:System.TypedReference.get_IsNull</Target>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:System.Type.get_ConstValue</Target>
+    <Left>ref/net8.0/System.Private.CoreLib.dll</Left>
+    <Right>lib/net8.0/System.Private.CoreLib.dll</Right>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:System.Type.get_ConstValueParameterType</Target>
+    <Left>ref/net8.0/System.Private.CoreLib.dll</Left>
+    <Right>lib/net8.0/System.Private.CoreLib.dll</Right>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:System.Type.get_ConstValueType</Target>
+    <Left>ref/net8.0/System.Private.CoreLib.dll</Left>
+    <Right>lib/net8.0/System.Private.CoreLib.dll</Right>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:System.Type.get_IsConstValue</Target>
+    <Left>ref/net8.0/System.Private.CoreLib.dll</Left>
+    <Right>lib/net8.0/System.Private.CoreLib.dll</Right>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:System.Type.get_IsConstValueParameter</Target>
+    <Left>ref/net8.0/System.Private.CoreLib.dll</Left>
+    <Right>lib/net8.0/System.Private.CoreLib.dll</Right>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:System.Type.MakeConstValueType(System.Object)</Target>
+    <Left>ref/net8.0/System.Private.CoreLib.dll</Left>
+    <Right>lib/net8.0/System.Private.CoreLib.dll</Right>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0014</DiagnosticId>

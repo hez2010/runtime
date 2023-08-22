@@ -856,6 +856,141 @@ FCIMPL1(FC_BOOL_RET, RuntimeTypeHandle::IsByRefLike, ReflectClassBaseObject *pTy
 }
 FCIMPLEND
 
+FCIMPL1(FC_BOOL_RET, RuntimeTypeHandle::IsConstValueParameter, ReflectClassBaseObject* pTypeUNSAFE)
+{
+    CONTRACTL {
+        FCALL_CHECK;
+    }
+    CONTRACTL_END;
+    
+    REFLECTCLASSBASEREF refType = (REFLECTCLASSBASEREF)ObjectToOBJECTREF(pTypeUNSAFE);
+
+    _ASSERTE(refType != NULL);
+
+    TypeHandle typeHandle = refType->GetType();
+
+    FC_RETURN_BOOL(typeHandle.IsGenericVariable() && RidFromToken(typeHandle.AsGenericVariable()->GetType()));
+}
+FCIMPLEND
+
+FCIMPL1(Object*, RuntimeTypeHandle::GetConstValue, ReflectClassBaseObject* pTypeUNSAFE)
+{
+    CONTRACTL {
+        FCALL_CHECK;
+    }
+    CONTRACTL_END;
+    
+    REFLECTCLASSBASEREF refType = (REFLECTCLASSBASEREF)ObjectToOBJECTREF(pTypeUNSAFE);
+    
+    _ASSERTE(refType != NULL);
+
+    TypeHandle typeHandle = refType->GetType();
+
+    if (!typeHandle.IsConstValue())
+        FCThrowRes(kArgumentException, W("Arg_InvalidHandle"));
+    
+    TypeHandle type = typeHandle.AsConstValue()->GetConstValueType();
+    UINT64 value = typeHandle.AsConstValue()->GetConstValue();
+
+    struct {
+        OBJECTREF retVal;
+    } gc;
+
+    gc.retVal = NULL;
+
+    HELPER_METHOD_FRAME_BEGIN_RET_PROTECT(gc);
+    {
+        gc.retVal = AllocateObject(type.AsMethodTable(), false);
+        CopyValueClass(gc.retVal->GetData(), &value, type.AsMethodTable());
+    }
+    HELPER_METHOD_FRAME_END();
+
+    return OBJECTREFToObject(gc.retVal);
+}
+FCIMPLEND
+
+FCIMPL1(ReflectClassBaseObject*, RuntimeTypeHandle::GetConstValueType, ReflectClassBaseObject* pTypeUNSAFE)
+{
+    CONTRACTL {
+        FCALL_CHECK;
+    }
+    CONTRACTL_END;
+    
+    REFLECTCLASSBASEREF refType = (REFLECTCLASSBASEREF)ObjectToOBJECTREF(pTypeUNSAFE);
+    
+    _ASSERTE(refType != NULL);
+
+    TypeHandle typeHandle = refType->GetType();
+
+    if (!typeHandle.IsConstValue())
+        FCThrowRes(kArgumentException, W("Arg_InvalidHandle"));
+    
+    TypeHandle type = typeHandle.AsConstValue()->GetConstValueType();
+
+    RETURN_CLASS_OBJECT(type, refType);
+}
+FCIMPLEND
+
+FCIMPL1(ReflectClassBaseObject*, RuntimeTypeHandle::GetConstValueParameterType, ReflectClassBaseObject* pTypeUNSAFE)
+{
+    CONTRACTL {
+        FCALL_CHECK;
+    }
+    CONTRACTL_END;
+    
+    REFLECTCLASSBASEREF refType = (REFLECTCLASSBASEREF)ObjectToOBJECTREF(pTypeUNSAFE);
+    
+    _ASSERTE(refType != NULL);
+
+    TypeHandle typeHandle = refType->GetType();
+
+    if (!(typeHandle.IsGenericVariable() && RidFromToken(typeHandle.AsGenericVariable()->GetType())))
+        FCThrowRes(kArgumentException, W("Arg_InvalidHandle"));
+    
+    struct
+    {
+        TypeHandle retVal;
+    } gc;
+    
+    HELPER_METHOD_FRAME_BEGIN_RET_PROTECT(gc);
+    {
+        gc.retVal = typeHandle.AsGenericVariable()->LoadTypeType();
+    }
+    HELPER_METHOD_FRAME_END();
+
+    RETURN_CLASS_OBJECT(gc.retVal, refType);
+}
+FCIMPLEND
+
+FCIMPL1(ReflectClassBaseObject*, RuntimeTypeHandle::MakeConstValueType, Object* pValue)
+{
+    CONTRACTL {
+        FCALL_CHECK;
+    }
+    CONTRACTL_END;
+    
+    REFLECTCLASSBASEREF refValue = (REFLECTCLASSBASEREF)ObjectToOBJECTREF(pValue);
+    _ASSERTE(refValue != NULL);
+
+    TypeHandle typeHandle = refValue->GetTypeHandle();
+    UINT64 value = 0;
+    CopyValueClass(&value, refValue->GetData(), typeHandle.AsMethodTable());
+    
+    struct
+    {
+        TypeHandle retVal;
+    } gc;
+    
+    HELPER_METHOD_FRAME_BEGIN_RET_PROTECT(gc);
+    {
+        gc.retVal = ClassLoader::LoadConstValueTypeThrowing(typeHandle, value);
+    }
+    HELPER_METHOD_FRAME_END();
+
+    RETURN_CLASS_OBJECT(gc.retVal, NULL);
+}
+FCIMPLEND
+
 FCIMPL1(Object *, RuntimeTypeHandle::GetArgumentTypesFromFunctionPointer, ReflectClassBaseObject *pTypeUNSAFE)
 {
     CONTRACTL {

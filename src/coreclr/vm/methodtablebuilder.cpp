@@ -1711,22 +1711,22 @@ MethodTableBuilder::BuildMethodTableThrowing(
 
     if (IsValueClass())
     {
-        const void* pVal;                  // The custom value.
-        ULONG       cbVal;                 // Size of the custom value.
-        HRESULT hr = GetCustomAttribute(bmtInternal->pType->GetTypeDefToken(),
-            WellKnownAttribute::InlineArrayAttribute,
-            &pVal, &cbVal);
-
-        if (hr != S_FALSE)
+        LPCUTF8 className;
+        LPCUTF8 nameSpace;
+        HRESULT hr = GetMDImport()->GetNameOfTypeDef(bmtInternal->pType->GetTypeDefToken(), &className, &nameSpace);
+        if (hr != S_FALSE && strcmp(nameSpace, "System") == 0 && strcmp(className, "ValueArray`2") == 0)
         {
-            if (bmtEnumFields->dwNumInstanceFields != 1)
+            Instantiation inst = bmtGenerics->GetInstantiation();
+            if (inst.GetNumArgs() == 2 &&
+                inst[1].IsConstValue() &&
+                inst[1].GetConstValueType().GetInternalCorElementType() == ELEMENT_TYPE_I4)
             {
-                BuildMethodTableThrowException(IDS_CLASSLOAD_INLINE_ARRAY_FIELD_COUNT);
-            }
+                if (bmtEnumFields->dwNumInstanceFields != 1)
+                {
+                    BuildMethodTableThrowException(IDS_CLASSLOAD_INLINE_ARRAY_FIELD_COUNT);
+                }
 
-            if (cbVal >= (sizeof(INT32) + 2))
-            {
-                INT32 repeat = GET_UNALIGNED_VAL32((byte*)pVal + 2);
+                INT32 repeat = (INT32)inst[1].GetConstValue();
                 if (repeat > 0)
                 {
                     bmtFP->NumInlineArrayElements = repeat;
@@ -1736,10 +1736,40 @@ MethodTableBuilder::BuildMethodTableThrowing(
                 {
                     BuildMethodTableThrowException(IDS_CLASSLOAD_INLINE_ARRAY_LENGTH);
                 }
+            }
+        }
+        else
+        {
+            const void* pVal;                  // The custom value.
+            ULONG       cbVal;                 // Size of the custom value.
+            HRESULT hr = GetCustomAttribute(bmtInternal->pType->GetTypeDefToken(),
+                WellKnownAttribute::InlineArrayAttribute,
+                &pVal, &cbVal);
 
-                if (HasExplicitFieldOffsetLayout())
+            if (hr != S_FALSE)
+            {
+                if (bmtEnumFields->dwNumInstanceFields != 1)
                 {
-                    BuildMethodTableThrowException(IDS_CLASSLOAD_INLINE_ARRAY_EXPLICIT);
+                    BuildMethodTableThrowException(IDS_CLASSLOAD_INLINE_ARRAY_FIELD_COUNT);
+                }
+
+                if (cbVal >= (sizeof(INT32) + 2))
+                {
+                    INT32 repeat = GET_UNALIGNED_VAL32((byte*)pVal + 2);
+                    if (repeat > 0)
+                    {
+                        bmtFP->NumInlineArrayElements = repeat;
+                        GetHalfBakedClass()->SetIsInlineArray();
+                    }
+                    else
+                    {
+                        BuildMethodTableThrowException(IDS_CLASSLOAD_INLINE_ARRAY_LENGTH);
+                    }
+
+                    if (HasExplicitFieldOffsetLayout())
+                    {
+                        BuildMethodTableThrowException(IDS_CLASSLOAD_INLINE_ARRAY_EXPLICIT);
+                    }
                 }
             }
         }

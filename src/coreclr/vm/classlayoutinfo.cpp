@@ -976,7 +976,22 @@ EEClassNativeLayoutInfo* EEClassNativeLayoutInfo::CollectNativeLayoutFieldMetada
             WellKnownAttribute::InlineArrayAttribute,
             &pVal, &cbVal);
 
-        if (hr != S_FALSE)
+        if (hr == S_FALSE)
+        {
+            // An inline array without InlineArrayAttribute must be a value array,
+            // we need to calculate the size based on the const type argument.
+            if (pMT->HasInstantiation())
+            {
+                Instantiation inst = pMT->GetInstantiation();
+                if (inst.GetNumArgs() == 2 &&
+                    inst[1].IsConstValue() &&
+                    inst[1].GetConstValueType().GetInternalCorElementType() == ELEMENT_TYPE_I4)
+                {
+                    classSizeInMetadata = (INT32)inst[1].GetConstValue() * inst[0].AsMethodTable()->GetNativeSize();
+                }
+            }
+        }
+        else
         {
             // Validity of the InlineArray attribute is checked at type-load time,
             // so we only assert here as we should have already checked this and failed

@@ -1169,6 +1169,9 @@ OBJECTREF TypeHandle::GetManagedClassObject() const
 
             case ELEMENT_TYPE_FNPTR:
                 return ((FnPtrTypeDesc*)AsTypeDesc())->GetManagedClassObject();
+                
+            case ELEMENT_TYPE_CTARG:
+                return ((ConstValueTypeDesc*)AsTypeDesc())->GetManagedClassObject();
 
             default:
                 _ASSERTE(!"Bad Element Type");

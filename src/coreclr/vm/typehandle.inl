@@ -278,7 +278,9 @@ FORCEINLINE OBJECTREF TypeHandle::GetManagedClassObjectFast() const
         case ELEMENT_TYPE_FNPTR:
             o = dac_cast<PTR_FnPtrTypeDesc>(AsTypeDesc())->GetManagedClassObjectFast();
             break;
-
+        case ELEMENT_TYPE_CTARG:
+            o = dac_cast<PTR_ConstValueTypeDesc>(AsTypeDesc())->GetManagedClassObjectFast();
+            break;
         default:
             _ASSERTE(!"Bad Element Type");
             return NULL;

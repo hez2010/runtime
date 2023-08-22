@@ -323,7 +323,7 @@ public:
 #ifndef DACCESS_COMPILE
 
     ConstValueTypeDesc(TypeHandle type, uint64_t value) :
-        TypeDesc(CorElementType::ELEMENT_TYPE_CTARG), m_type(type)
+        TypeDesc(CorElementType::ELEMENT_TYPE_CTARG), m_type(type), m_value(value)
     {
         CONTRACTL
         {
@@ -332,7 +332,7 @@ public:
         }
         CONTRACTL_END;
 
-        m_value = value;
+        m_hExposedClassObject = 0;
     }
  
 #endif // #ifndef DACCESS_COMPILE
@@ -355,8 +355,51 @@ public:
 
         return m_value;
     }
-    
+
+#ifndef DACCESS_COMPILE
+    OBJECTREF GetManagedClassObject();
+    OBJECTREF GetManagedClassObjectIfExists()
+    {
+        CONTRACTL
+        {
+            NOTHROW;
+            GC_NOTRIGGER;
+            MODE_COOPERATIVE;
+        }
+        CONTRACTL_END;
+
+        const RUNTIMETYPEHANDLE handle = m_hExposedClassObject;
+
+        OBJECTREF retVal;
+        if (!TypeHandle::GetManagedClassObjectFromHandleFast(handle, &retVal) &&
+            !GetLoaderAllocator()->GetHandleValueFastPhase2(handle, &retVal))
+        {
+            return NULL;
+        }
+
+        COMPILER_ASSUME(retVal != NULL);
+        return retVal;
+    }
+
+    OBJECTREF GetManagedClassObjectFast()
+    {
+        LIMITED_METHOD_CONTRACT;
+
+        OBJECTREF objRef;
+        if (!TypeHandle::GetManagedClassObjectFromHandleFast(m_hExposedClassObject, &objRef))
+        {
+            return FALSE;
+        }
+        COMPILER_ASSUME(objRef != NULL);
+        return objRef;
+    }
+#endif
+
 protected:
+    // Non-unloadable context: internal RuntimeType object handle
+    // Unloadable context: slot index in LoaderAllocator's pinned table
+    RUNTIMETYPEHANDLE m_hExposedClassObject;
+
     TypeHandle m_type;
     uint64_t m_value;
 };
@@ -488,6 +531,8 @@ public:
     // Load the owning type. Note that the result is not guaranteed to be full loaded
     MethodDesc * LoadOwnerMethod();
     TypeHandle LoadOwnerType();
+
+    TypeHandle LoadTypeType();
 
     BOOL ConstraintsLoaded() { LIMITED_METHOD_CONTRACT; return m_numConstraints != (DWORD)-1; }
 

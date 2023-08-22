@@ -405,5 +405,10 @@ namespace System
             length = outHandles.Length;
             return outHandles;
         }
+
+        internal static Type MakeConstValueType(object value)
+        {
+            throw new NotSupportedException(value.ToString());
+        }
     }
 }

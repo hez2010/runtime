@@ -1,0 +1,12 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.IL">
+  <PropertyGroup>
+    <TargetFramework>$(NetCoreAppCurrent)</TargetFramework>
+    <ILAsmToolPath>$(MSBuildThisFileDirectory)\..\..\..\..\artifacts\bin\coreclr\$(CoreClrOS).$(CoreClrArch).$(Configuration)</ILAsmToolPath>
+    <IsTrimmable>false</IsTrimmable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="System.ValueArray.il" />
+    <None Include="System.ValueArray.il" />
+  </ItemGroup>
+</Project>

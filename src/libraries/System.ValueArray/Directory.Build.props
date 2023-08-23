@@ -1,0 +1,12 @@
+﻿<Project>
+  <Import Project="..\Directory.Build.props" />
+  <PropertyGroup>
+    <StrongNameKeyId>Microsoft</StrongNameKeyId>
+    <CoreClrOS Condition="$([MSBuild]::IsOSPlatform('Windows'))">windows</CoreClrOS>
+    <CoreClrOS Condition="$([MSBuild]::IsOSPlatform('Linux'))">linux</CoreClrOS>
+    <CoreClrOS Condition="$([MSBuild]::IsOSPlatform('OSX'))">osx</CoreClrOS>
+    <CoreClrOS Condition="$([MSBuild]::IsOSPlatform('FreeBSD'))">freebsd</CoreClrOS>
+    <CoreClrArch>$([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)</CoreClrArch>
+    <CoreClrArch>$(CoreClrArch.ToLowerInvariant())</CoreClrArch>
+  </PropertyGroup>
+</Project>

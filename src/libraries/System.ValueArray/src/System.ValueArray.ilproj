@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.IL">
+  <PropertyGroup>
+    <TargetFramework>$(NetCoreAppCurrent)</TargetFramework>
+    <ILAsmToolPath>$(MSBuildThisFileDirectory)\..\..\..\..\artifacts\bin\coreclr\$(CoreClrOS).$(CoreClrArch).$(Configuration)</ILAsmToolPath>
+    <IsTrimmable>false</IsTrimmable>
+    <IsPackable>true</IsPackable>
+    <DisablePackageBaselineValidation>true</DisablePackageBaselineValidation>
+    <PackageDescription>Provides high-performance, zero-allocating and fix-sized array types.</PackageDescription>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="System.ValueArray.il" />
+    <None Include="System.ValueArray.il" />
+  </ItemGroup>
+</Project>

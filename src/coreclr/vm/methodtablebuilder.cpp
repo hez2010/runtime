@@ -1727,7 +1727,7 @@ MethodTableBuilder::BuildMethodTableThrowing(
                 }
 
                 INT32 repeat = (INT32)inst[1].GetConstValue();
-                if (repeat > 0)
+                if (repeat >= 0)
                 {
                     bmtFP->NumInlineArrayElements = repeat;
                     GetHalfBakedClass()->SetIsInlineArray();

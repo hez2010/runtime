@@ -1721,20 +1721,16 @@ MethodTableBuilder::BuildMethodTableThrowing(
                 inst[1].IsConstValue() &&
                 inst[1].GetConstValueType().GetInternalCorElementType() == ELEMENT_TYPE_I4)
             {
-                if (bmtEnumFields->dwNumInstanceFields != 1)
-                {
-                    BuildMethodTableThrowException(IDS_CLASSLOAD_INLINE_ARRAY_FIELD_COUNT);
-                }
-
                 INT32 repeat = (INT32)inst[1].GetConstValue();
                 if (repeat >= 0)
                 {
                     bmtFP->NumInlineArrayElements = repeat;
+                    bmtFP->fIsInlineArray = true;
                     GetHalfBakedClass()->SetIsInlineArray();
                 }
                 else
                 {
-                    BuildMethodTableThrowException(IDS_CLASSLOAD_INLINE_ARRAY_LENGTH);
+                    BuildMethodTableThrowException(META_E_CA_NEGATIVE_CONSTSIZE);
                 }
             }
         }
@@ -1756,9 +1752,10 @@ MethodTableBuilder::BuildMethodTableThrowing(
                 if (cbVal >= (sizeof(INT32) + 2))
                 {
                     INT32 repeat = GET_UNALIGNED_VAL32((byte*)pVal + 2);
-                    if (repeat > 0)
+                    if (repeat >= 0)
                     {
                         bmtFP->NumInlineArrayElements = repeat;
+                        bmtFP->fIsInlineArray = true;
                         GetHalfBakedClass()->SetIsInlineArray();
                     }
                     else
@@ -1794,9 +1791,17 @@ MethodTableBuilder::BuildMethodTableThrowing(
 
         _ASSERTE(HasLayout());
 
-        if (bmtFP->NumInlineArrayElements != 0)
+        if (bmtFP->fIsInlineArray)
         {
-            GetLayoutInfo()->m_cbManagedSize *= bmtFP->NumInlineArrayElements;
+            if (bmtFP->NumInlineArrayElements != 0)
+            {
+                GetLayoutInfo()->m_cbManagedSize *= bmtFP->NumInlineArrayElements;
+            }
+            else
+            {
+                GetLayoutInfo()->m_cbManagedSize = 1;
+                GetLayoutInfo()->m_cbPackingSize = 1;
+            }
         }
 
         bmtFP->NumInstanceFieldBytes = GetLayoutInfo()->m_cbManagedSize;
@@ -8445,21 +8450,29 @@ VOID    MethodTableBuilder::PlaceInstanceFields(MethodTable ** pByValueClassCach
             BuildMethodTableThrowException(IDS_CLASSLOAD_FIELDTOOLARGE);
         }
 
-        if (bmtFP->NumInlineArrayElements > 1)
+        if (bmtFP->fIsInlineArray)
         {
-            INT64 extendedSize = (INT64)dwNumInstanceFieldBytes * (INT64)bmtFP->NumInlineArrayElements;
-            // limit the max size of array instance to 1MiB
-            const INT64 maxSize = 1024 * 1024;
-            if (extendedSize > maxSize)
+            if (bmtFP->NumInlineArrayElements > 1)
             {
-                BuildMethodTableThrowException(IDS_CLASSLOAD_FIELDTOOLARGE);
+                INT64 extendedSize = (INT64)dwNumInstanceFieldBytes * (INT64)bmtFP->NumInlineArrayElements;
+                // limit the max size of array instance to 1MiB
+                const INT64 maxSize = 1024 * 1024;
+                if (extendedSize > maxSize)
+                {
+                    BuildMethodTableThrowException(IDS_CLASSLOAD_FIELDTOOLARGE);
+                }
+
+                dwNumInstanceFieldBytes = (DWORD)extendedSize;
+
+                if (pFieldDescList[0].IsByValue())
+                {
+                    dwNumGCPointerSeries *= bmtFP->NumInlineArrayElements;
+                }
             }
-
-            dwNumInstanceFieldBytes = (DWORD)extendedSize;
-
-            if (pFieldDescList[0].IsByValue())
+            else if (bmtFP->NumInlineArrayElements == 0)
             {
-                dwNumGCPointerSeries *= bmtFP->NumInlineArrayElements;
+                dwNumInstanceFieldBytes = 1;
+                dwNumGCPointerSeries = 0;
             }
         }
 
@@ -11644,7 +11657,7 @@ VOID MethodTableBuilder::HandleGCForValueClasses(MethodTable ** pByValueClassCac
         }
 
         DWORD repeat = 1;
-        if (bmtFP->NumInlineArrayElements > 1)
+        if (bmtFP->fIsInlineArray)
         {
             repeat = bmtFP->NumInlineArrayElements;
         }

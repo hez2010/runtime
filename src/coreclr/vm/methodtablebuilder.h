@@ -2000,6 +2000,7 @@ private:
 
         bool  fIsAllGCPointers;
         bool  fIsByRefLikeType;
+        bool  fIsInlineArray;
         bool  fHasFixedAddressValueTypes;
         bool  fHasSelfReferencingStaticValueTypeField_WithRVA;
 

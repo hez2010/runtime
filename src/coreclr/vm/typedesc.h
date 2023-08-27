@@ -491,19 +491,30 @@ public:
                     ULONG cSig;
                     PCCOR_SIGNATURE pSig;
                     IMDInternalImport *pInternalImport = pModule->GetMDImport();
-                    SigTypeContext typeContext;
-                    if (TypeFromToken(m_typeOrMethodDef) == mdtTypeDef)
-                    {
-                        SigTypeContext::InitTypeContext(GetModule()->LookupTypeDef(m_typeOrMethodDef), &typeContext);
-                    }
-                    else
-                    {
-                        SigTypeContext::InitTypeContext(GetModule()->LookupMethodDef(m_typeOrMethodDef), &typeContext);
-                    }
                     if (!FAILED(pInternalImport->GetTypeSpecFromToken(m_typeToken, &pSig, &cSig)))
                     {
-                        SigPointer sigptr(pSig, cSig);
-                        m_type = sigptr.GetTypeHandleThrowing(pModule, &typeContext);
+                        SigPointer sigPtr(pSig, cSig);
+                        SigTypeContext typeContext;
+                        uint32_t index;
+                        if (!FAILED(sigPtr.GetData(&index)))
+                        {
+                            if (TypeFromToken(m_typeOrMethodDef) == mdtTypeDef)
+                            {
+                                SigTypeContext::InitTypeContext(GetModule()->LookupTypeDef(m_typeOrMethodDef), &typeContext);
+                                if (index < typeContext.m_classInst.GetNumArgs())
+                                {
+                                    m_type = typeContext.m_classInst[index];
+                                }
+                            }
+                            else
+                            {
+                                SigTypeContext::InitTypeContext(GetModule()->LookupMethodDef(m_typeOrMethodDef), &typeContext);
+                                if (index < typeContext.m_methodInst.GetNumArgs())
+                                {
+                                    m_type = typeContext.m_methodInst[index];
+                                }
+                            }
+                        }
                     }
                     break;
             }

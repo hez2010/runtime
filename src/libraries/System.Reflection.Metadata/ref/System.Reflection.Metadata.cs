@@ -1373,7 +1373,7 @@ namespace System.Reflection.Metadata
     }
     public partial interface ISignatureTypeProvider<TType, TGenericContext> : System.Reflection.Metadata.IConstructedTypeProvider<TType>, System.Reflection.Metadata.ISimpleTypeProvider<TType>, System.Reflection.Metadata.ISZArrayTypeProvider<TType>
     {
-        TType GetConstValueType(PrimitiveTypeCode typeCode, ulong value);
+        TType GetConstValueType(TType type, object? value);
         TType GetFunctionPointerType(System.Reflection.Metadata.MethodSignature<TType> signature);
         TType GetGenericMethodParameter(TGenericContext genericContext, int index);
         TType GetGenericTypeParameter(TGenericContext genericContext, int index);

@@ -15,13 +15,35 @@ namespace System.Reflection.TypeLoading.Ecma
         private readonly EcmaModule _ecmaModule;
 
         internal EcmaGenericParameterType(GenericParameterHandle handle, EcmaModule module)
-            : base()
+            : base(GetGenericParameterType(module, handle))
         {
             Debug.Assert(!handle.IsNil);
 
             Handle = handle;
             _ecmaModule = module;
             _neverAccessThisExceptThroughGenericParameterProperty = handle.GetGenericParameter(Reader);
+        }
+
+        private static RoType? GetGenericParameterType(EcmaModule module, GenericParameterHandle handle)
+        {
+            GenericParameter parameter = handle.GetGenericParameter(module.Reader);
+            EntityHandle type = parameter.Type;
+            if (type.IsNil)
+            {
+                return null;
+            }
+
+            switch (type.Kind)
+            {
+                case HandleKind.TypeDefinition:
+                    return module.GetTypeFromDefinition(module.Reader, (TypeDefinitionHandle)type, 0);
+                case HandleKind.TypeReference:
+                    return module.GetTypeFromReference(module.Reader, (TypeReferenceHandle)type, 0);
+                case HandleKind.TypeSpecification:
+                    return module.GetTypeFromSpecification(module.Reader, handle.ResolveGenericParameter(module).TypeContext, (TypeSpecificationHandle)type, 0);
+            }
+
+            return null;
         }
 
         internal sealed override RoModule GetRoModule() => _ecmaModule;

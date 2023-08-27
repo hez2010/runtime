@@ -47,7 +47,6 @@ namespace System
         public virtual bool IsGenericMethodParameter => IsGenericParameter && DeclaringMethod != null;
         public virtual bool IsGenericType => false;
         public virtual bool IsGenericTypeDefinition => false;
-        public virtual bool IsConstValueParameter => false;
         public virtual bool IsConstValue => false;
 
         public virtual bool IsSZArray => throw NotImplemented.ByDesign;
@@ -119,8 +118,6 @@ namespace System
         protected abstract bool IsPrimitiveImpl();
         public bool IsValueType { [Intrinsic] get => IsValueTypeImpl(); }
         protected virtual bool IsValueTypeImpl() => IsSubclassOf(typeof(ValueType));
-        public virtual Type ConstValueParameterType => throw new InvalidOperationException();
-        public virtual Type ConstValueType => throw new InvalidOperationException();
         public virtual object ConstValue => throw new InvalidOperationException();
 
         [Intrinsic]

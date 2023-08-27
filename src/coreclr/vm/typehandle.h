@@ -478,6 +478,7 @@ public:
 
     // VAR or MVAR
     BOOL IsGenericVariable() const;
+    BOOL IsConstGenericVariable() const;
     
     // CTARG
     BOOL IsConstValue() const;

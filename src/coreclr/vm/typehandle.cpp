@@ -93,6 +93,13 @@ BOOL TypeHandle::IsGenericVariable() const {
     return(IsTypeDesc() && CorTypeInfo::IsGenericVariable_NoThrow(AsTypeDesc()->GetInternalCorElementType()));
 }
 
+BOOL TypeHandle::IsConstGenericVariable() const {
+    LIMITED_METHOD_DAC_CONTRACT;
+
+    return(IsTypeDesc() && AsTypeDesc()->IsConstGenericVariable());
+}
+
+
 BOOL TypeHandle::HasTypeParam() const {
     LIMITED_METHOD_DAC_CONTRACT;
 

@@ -12197,7 +12197,7 @@ MethodTableBuilder::GatherGenericsInfo(
     }
 
     bmtGenericsInfo->fContainsGenericVariables = MethodTable::ComputeContainsGenericVariables(inst);
-
+    
     SigTypeContext typeContext(inst, Instantiation());
     bmtGenericsInfo->typeContext = typeContext;
 } // MethodTableBuilder::GatherGenericsInfo

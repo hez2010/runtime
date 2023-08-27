@@ -35,8 +35,22 @@ inline PTR_MethodTable  TypeDesc::GetMethodTable() {
 inline TypeHandle TypeDesc::GetTypeParam() {
     LIMITED_METHOD_DAC_CONTRACT;
 
-    if (IsGenericVariable() || IsFnPtr())
+    if (IsFnPtr())
         return TypeHandle();
+
+    if (IsGenericVariable() && !IsConstGenericVariable()) {
+        return TypeHandle();
+    }
+
+    if (IsConstGenericVariable()) {
+        TypeVarTypeDesc* asTypeVar = dac_cast<PTR_TypeVarTypeDesc>(this);
+        return asTypeVar->GetType();
+    }
+
+    if (IsConstValue()) {
+        ConstValueTypeDesc* asConstValue = dac_cast<PTR_ConstValueTypeDesc>(this);
+        return asConstValue->GetConstValueType();
+    }
 
     _ASSERTE(HasTypeParam());
     ParamTypeDesc* asParam = dac_cast<PTR_ParamTypeDesc>(this);

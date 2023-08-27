@@ -421,7 +421,7 @@ FCIMPL1(ReflectClassBaseObject *, RuntimeTypeHandle::GetElementType, ReflectClas
         if (!typeHandle.IsTypeDesc())
             return 0;
 
-        if (typeHandle.IsGenericVariable())
+        if (typeHandle.IsGenericVariable() && !typeHandle.IsConstGenericVariable())
             return 0;
 
         typeReturn = typeHandle.AsTypeDesc()->GetTypeParam();
@@ -869,7 +869,7 @@ FCIMPL1(FC_BOOL_RET, RuntimeTypeHandle::IsConstValueParameter, ReflectClassBaseO
 
     TypeHandle typeHandle = refType->GetType();
 
-    FC_RETURN_BOOL(typeHandle.IsGenericVariable() && RidFromToken(typeHandle.AsGenericVariable()->GetType()));
+    FC_RETURN_BOOL(typeHandle.IsConstGenericVariable());
 }
 FCIMPLEND
 
@@ -906,59 +906,6 @@ FCIMPL1(Object*, RuntimeTypeHandle::GetConstValue, ReflectClassBaseObject* pType
     HELPER_METHOD_FRAME_END();
 
     return OBJECTREFToObject(gc.retVal);
-}
-FCIMPLEND
-
-FCIMPL1(ReflectClassBaseObject*, RuntimeTypeHandle::GetConstValueType, ReflectClassBaseObject* pTypeUNSAFE)
-{
-    CONTRACTL {
-        FCALL_CHECK;
-    }
-    CONTRACTL_END;
-    
-    REFLECTCLASSBASEREF refType = (REFLECTCLASSBASEREF)ObjectToOBJECTREF(pTypeUNSAFE);
-    
-    _ASSERTE(refType != NULL);
-
-    TypeHandle typeHandle = refType->GetType();
-
-    if (!typeHandle.IsConstValue())
-        FCThrowRes(kArgumentException, W("Arg_InvalidHandle"));
-    
-    TypeHandle type = typeHandle.AsConstValue()->GetConstValueType();
-
-    RETURN_CLASS_OBJECT(type, refType);
-}
-FCIMPLEND
-
-FCIMPL1(ReflectClassBaseObject*, RuntimeTypeHandle::GetConstValueParameterType, ReflectClassBaseObject* pTypeUNSAFE)
-{
-    CONTRACTL {
-        FCALL_CHECK;
-    }
-    CONTRACTL_END;
-    
-    REFLECTCLASSBASEREF refType = (REFLECTCLASSBASEREF)ObjectToOBJECTREF(pTypeUNSAFE);
-    
-    _ASSERTE(refType != NULL);
-
-    TypeHandle typeHandle = refType->GetType();
-
-    if (!(typeHandle.IsGenericVariable() && RidFromToken(typeHandle.AsGenericVariable()->GetType())))
-        FCThrowRes(kArgumentException, W("Arg_InvalidHandle"));
-    
-    struct
-    {
-        TypeHandle retVal;
-    } gc;
-    
-    HELPER_METHOD_FRAME_BEGIN_RET_PROTECT(gc);
-    {
-        gc.retVal = typeHandle.AsGenericVariable()->LoadTypeType();
-    }
-    HELPER_METHOD_FRAME_END();
-
-    RETURN_CLASS_OBJECT(gc.retVal, refType);
 }
 FCIMPLEND
 

@@ -332,6 +332,7 @@ namespace System.Reflection.Metadata.Ecma335
             }
 
             elementType = _provider.GetPrimitiveType((PrimitiveTypeCode)typeCode);
+
             byte[] rawBytes = blobReader.ReadBytes(size);
             ulong rawValue = 0;
             unsafe
@@ -342,7 +343,24 @@ namespace System.Reflection.Metadata.Ecma335
                 }
             }
 
-            return _provider.GetConstValueType((PrimitiveTypeCode)typeCode, rawValue);
+            object? value = (PrimitiveTypeCode)typeCode switch
+            {
+                PrimitiveTypeCode.Boolean => Unsafe.As<ulong, bool>(ref rawValue),
+                PrimitiveTypeCode.SByte => Unsafe.As<ulong, sbyte>(ref rawValue),
+                PrimitiveTypeCode.Byte => Unsafe.As<ulong, byte>(ref rawValue),
+                PrimitiveTypeCode.Char => Unsafe.As<ulong, char>(ref rawValue),
+                PrimitiveTypeCode.Int16 => Unsafe.As<ulong, short>(ref rawValue),
+                PrimitiveTypeCode.UInt16 => Unsafe.As<ulong, ushort>(ref rawValue),
+                PrimitiveTypeCode.Int32 => Unsafe.As<ulong, int>(ref rawValue),
+                PrimitiveTypeCode.UInt32 => Unsafe.As<ulong, uint>(ref rawValue),
+                PrimitiveTypeCode.Int64 => Unsafe.As<ulong, long>(ref rawValue),
+                PrimitiveTypeCode.UInt64 => Unsafe.As<ulong, ulong>(ref rawValue),
+                PrimitiveTypeCode.Single => Unsafe.As<ulong, float>(ref rawValue),
+                PrimitiveTypeCode.Double => Unsafe.As<ulong, double>(ref rawValue),
+                _ => null,
+            };
+
+            return _provider.GetConstValueType(elementType, value);
         }
 
         private TType DecodeTypeHandle(ref BlobReader blobReader, byte rawTypeKind, bool allowTypeSpecifications)

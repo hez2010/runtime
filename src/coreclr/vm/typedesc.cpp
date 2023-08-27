@@ -284,6 +284,12 @@ BOOL TypeDesc::IsGenericVariable()
     return CorTypeInfo::IsGenericVariable_NoThrow(GetInternalCorElementType());
 }
 
+BOOL TypeDesc::IsConstGenericVariable()
+{
+    LIMITED_METHOD_DAC_CONTRACT;
+    return IsGenericVariable() && !dac_cast<PTR_TypeVarTypeDesc>(this)->GetType().IsNull();
+}
+
 BOOL TypeDesc::IsConstValue()
 {
     LIMITED_METHOD_DAC_CONTRACT;
@@ -307,7 +313,9 @@ BOOL TypeDesc::HasTypeParam()
     WRAPPER_NO_CONTRACT;
     SUPPORTS_DAC;
     return CorTypeInfo::IsModifier_NoThrow(GetInternalCorElementType()) ||
-           GetInternalCorElementType() == ELEMENT_TYPE_VALUETYPE;
+           GetInternalCorElementType() == ELEMENT_TYPE_VALUETYPE ||
+           GetInternalCorElementType() == ELEMENT_TYPE_CTARG ||
+           IsConstGenericVariable();
 }
 
 #ifndef DACCESS_COMPILE
@@ -795,44 +803,6 @@ TypeHandle TypeVarTypeDesc::LoadOwnerType()
     return genericType;
 }
 
-
-TypeHandle TypeVarTypeDesc::LoadTypeType()
-{
-    CONTRACTL
-    {
-        THROWS;
-        GC_TRIGGERS;
-        MODE_ANY;
-
-        PRECONDITION(RidFromToken(m_type));
-    }
-    CONTRACTL_END;
-    
-    SigTypeContext typeContext = SigTypeContext();
-
-    if (TypeFromToken(m_type) == mdtTypeSpec)
-    {
-        switch (TypeFromToken(m_typeOrMethodDef))
-        {
-            case mdtTypeDef:
-                SigTypeContext::InitTypeContext(LoadOwnerType(), &typeContext);
-                break;
-            case mdtMethodDef:
-                SigTypeContext::InitTypeContext(LoadOwnerMethod(), &typeContext);
-                break;
-            default:
-                _ASSERTE(!"unreachable");
-                break;
-        }
-    }
-
-    TypeHandle type = ClassLoader::LoadTypeDefOrRefOrSpecThrowing(GetModule(), m_type, &typeContext,
-        ClassLoader::ThrowIfNotFound,
-        ClassLoader::PermitUninstDefOrRef);
-
-    return type;
-}
-
 TypeHandle* TypeVarTypeDesc::GetCachedConstraints(DWORD *pNumConstraints)
 {
     LIMITED_METHOD_CONTRACT;
@@ -842,9 +812,6 @@ TypeHandle* TypeVarTypeDesc::GetCachedConstraints(DWORD *pNumConstraints)
     *pNumConstraints = m_numConstraints;
     return m_constraints;
 }
-
-
-
 
 TypeHandle* TypeVarTypeDesc::GetConstraints(DWORD *pNumConstraints, ClassLoadLevel level /* = CLASS_LOADED */)
 {
@@ -858,7 +825,6 @@ TypeHandle* TypeVarTypeDesc::GetConstraints(DWORD *pNumConstraints, ClassLoadLev
     *pNumConstraints = m_numConstraints;
     return m_constraints;
 }
-
 
 void TypeVarTypeDesc::LoadConstraints(ClassLoadLevel level /* = CLASS_LOADED */)
 {

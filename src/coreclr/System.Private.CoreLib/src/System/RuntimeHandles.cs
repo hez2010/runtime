@@ -142,16 +142,10 @@ namespace System
         }
 
         [MethodImpl(MethodImplOptions.InternalCall)]
-        internal static extern RuntimeType GetConstValueType(RuntimeType type);
-
-        [MethodImpl(MethodImplOptions.InternalCall)]
         internal static extern object GetConstValue(RuntimeType type);
 
         [MethodImpl(MethodImplOptions.InternalCall)]
         internal static extern bool IsConstValueParameter(RuntimeType type);
-
-        [MethodImpl(MethodImplOptions.InternalCall)]
-        internal static extern RuntimeType GetConstValueParameterType(RuntimeType type);
 
         [MethodImpl(MethodImplOptions.InternalCall)]
         internal static extern RuntimeType MakeConstValueType(object value);
@@ -162,7 +156,9 @@ namespace System
 
             return corElemType == CorElementType.ELEMENT_TYPE_ARRAY || corElemType == CorElementType.ELEMENT_TYPE_SZARRAY // IsArray
                    || (corElemType == CorElementType.ELEMENT_TYPE_PTR)                                          // IsPointer
-                   || (corElemType == CorElementType.ELEMENT_TYPE_BYREF);                                      // IsByRef
+                   || (corElemType == CorElementType.ELEMENT_TYPE_BYREF)                                        // IsByRef
+                   || IsConstValueParameter(type)                                                      　       // IsConstGenericVariable
+                   || IsConstValue(type);                                         　　　　　                     // IsConstValue
         }
 
         // ** WARNING **

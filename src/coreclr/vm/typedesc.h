@@ -102,6 +102,7 @@ public:
 
     // VAR, MVAR
     BOOL IsGenericVariable();
+    BOOL IsConstGenericVariable();
 
     // CTARG
     BOOL IsConstValue();
@@ -417,7 +418,7 @@ public:
 #ifndef DACCESS_COMPILE
 
     TypeVarTypeDesc(PTR_Module pModule, mdToken typeOrMethodDef, mdToken type, unsigned int index, mdGenericParam token) :
-        TypeDesc(GetTypeVarTokenType(pModule, typeOrMethodDef, type, token))
+        TypeDesc(GetTypeVarTokenType(pModule, typeOrMethodDef, token))
     {
         CONTRACTL
         {
@@ -432,7 +433,8 @@ public:
 
         m_pModule = pModule;
         m_typeOrMethodDef = typeOrMethodDef;
-        m_type = type;
+        m_typeToken = type;
+        m_type = TypeHandle();
         m_token = token;
         m_index = index;
         m_hExposedClassObject = 0;
@@ -440,7 +442,7 @@ public:
         m_numConstraints = (DWORD)-1;
     }
 
-    CorElementType GetTypeVarTokenType(PTR_Module pModule, mdToken typeOrMethodDef, mdToken type, mdGenericParam token)
+    CorElementType GetTypeVarTokenType(PTR_Module pModule, mdToken typeOrMethodDef, mdGenericParam token)
     {
         LIMITED_METHOD_CONTRACT;
 
@@ -468,10 +470,45 @@ public:
         return m_index;
     }
 
-    mdToken GetType()
+    TypeHandle GetType()
     {
         LIMITED_METHOD_CONTRACT;
         SUPPORTS_DAC;
+        
+        if (m_type.IsNull() && RidFromToken(m_typeToken))
+        {
+            PTR_Module pModule = GetModule();
+
+            switch (TypeFromToken(m_typeToken))
+            {
+                case mdtTypeDef:
+                    m_type = pModule->LookupTypeDef(m_typeToken);
+                    break;
+                case mdtTypeRef:
+                    m_type = pModule->LookupTypeRef(m_typeToken);
+                    break;
+                case mdtTypeSpec:
+                    ULONG cSig;
+                    PCCOR_SIGNATURE pSig;
+                    IMDInternalImport *pInternalImport = pModule->GetMDImport();
+                    SigTypeContext typeContext;
+                    if (TypeFromToken(m_typeOrMethodDef) == mdtTypeDef)
+                    {
+                        SigTypeContext::InitTypeContext(GetModule()->LookupTypeDef(m_typeOrMethodDef), &typeContext);
+                    }
+                    else
+                    {
+                        SigTypeContext::InitTypeContext(GetModule()->LookupMethodDef(m_typeOrMethodDef), &typeContext);
+                    }
+                    if (!FAILED(pInternalImport->GetTypeSpecFromToken(m_typeToken, &pSig, &cSig)))
+                    {
+                        SigPointer sigptr(pSig, cSig);
+                        m_type = sigptr.GetTypeHandleThrowing(pModule, &typeContext);
+                    }
+                    break;
+            }
+        }
+
         return m_type;
     }
 
@@ -532,8 +569,6 @@ public:
     MethodDesc * LoadOwnerMethod();
     TypeHandle LoadOwnerType();
 
-    TypeHandle LoadTypeType();
-
     BOOL ConstraintsLoaded() { LIMITED_METHOD_CONTRACT; return m_numConstraints != (DWORD)-1; }
 
     // Return NULL if no constraints are specified
@@ -571,7 +606,8 @@ protected:
     mdToken m_typeOrMethodDef;
 
     // the type of const type parameter if it is
-    mdToken m_type;
+    TypeHandle m_type;
+    mdToken m_typeToken;
 
     // Constraints, determined on first call to GetConstraints
     Volatile<DWORD> m_numConstraints;    // -1 until number has been determined

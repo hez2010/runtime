@@ -12,14 +12,17 @@ namespace System.Reflection.TypeLoading
     /// </summary>
     internal abstract partial class RoGenericParameterType : RoType
     {
-        protected RoGenericParameterType()
+        private readonly RoType? _type;
+        protected RoGenericParameterType(RoType? type)
             : base()
         {
+            _type = type;
         }
 
+        protected RoType? Type => _type;
         public sealed override bool IsTypeDefinition => false;
         public sealed override bool IsGenericTypeDefinition => false;
-        protected sealed override bool HasElementTypeImpl() => false;
+        protected sealed override bool HasElementTypeImpl() => Type != null;
         protected sealed override bool IsArrayImpl() => false;
         public sealed override bool IsSZArray => false;
         public sealed override bool IsVariableBoundArray => false;
@@ -38,7 +41,7 @@ namespace System.Reflection.TypeLoading
         protected sealed override TypeAttributes ComputeAttributeFlags() => TypeAttributes.Public;
         protected sealed override TypeCode GetTypeCodeImpl() => TypeCode.Object;
 
-        internal sealed override RoType? GetRoElementType() => null;
+        internal sealed override RoType? GetRoElementType() => Type;
         public sealed override int GetArrayRank() => throw new ArgumentException(SR.Argument_HasToBeArrayClass);
 
         public sealed override Type GetGenericTypeDefinition() => throw new InvalidOperationException(SR.InvalidOperation_NotGenericType);

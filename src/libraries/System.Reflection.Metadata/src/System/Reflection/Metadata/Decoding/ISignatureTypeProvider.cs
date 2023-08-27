@@ -8,10 +8,10 @@ namespace System.Reflection.Metadata
         /// <summary>
         /// Gets the type symbol for a const value type.
         /// </summary>
-        /// <param name="typeCode"></param>
+        /// <param name="type"></param>
         /// <param name="value"></param>
         /// <returns></returns>
-        TType GetConstValueType(PrimitiveTypeCode typeCode, ulong value);
+        TType GetConstValueType(TType type, object? value);
 
         /// <summary>
         /// Gets the a type symbol for the function pointer type of the given method signature.

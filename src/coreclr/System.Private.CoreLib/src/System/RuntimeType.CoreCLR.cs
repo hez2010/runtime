@@ -3717,9 +3717,6 @@ namespace System
         #region Const Value
         public override bool IsConstValue => RuntimeTypeHandle.IsConstValue(this);
         public override object ConstValue => RuntimeTypeHandle.GetConstValue(this);
-        public override Type ConstValueType => RuntimeTypeHandle.GetConstValueType(this);
-        public override bool IsConstValueParameter => RuntimeTypeHandle.IsConstValueParameter(this);
-        public override Type ConstValueParameterType => RuntimeTypeHandle.GetConstValueParameterType(this);
         #endregion
 
         #endregion

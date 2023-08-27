@@ -14,7 +14,7 @@ namespace System.Reflection.Metadata.Ecma335
     /// </remarks>
     public sealed class MetadataRootBuilder
     {
-        private const string DefaultMetadataVersionString = "v8.0.42424";
+        private const string DefaultMetadataVersionString = "v4.0.30319";
 
         // internal for testing
         internal static readonly ImmutableArray<int> EmptyRowCounts = ImmutableArray.Create(new int[MetadataTokens.TableCount]);

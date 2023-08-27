@@ -3078,7 +3078,7 @@ namespace System.Reflection.Metadata.Ecma335
         public void UInt64() { }
         public void UIntPtr() { }
         public void VoidPointer() { }
-        public void ConstValueType(PrimitiveTypeCode type, ulong value) { }
+        public void ConstValueType(out System.Reflection.Metadata.Ecma335.SignatureTypeEncoder type, out System.Reflection.Metadata.Ecma335.ScalarEncoder value) { throw null; }
     }
     public readonly struct SwitchInstructionEncoder
     {

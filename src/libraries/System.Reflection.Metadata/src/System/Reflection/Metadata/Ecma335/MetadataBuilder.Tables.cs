@@ -2328,7 +2328,7 @@ namespace System.Reflection.Metadata.Ecma335
                 writer.WriteUInt16(genericParam.Flags);
                 writer.WriteReference(genericParam.Owner, metadataSizes.TypeOrMethodDefCodedIndexIsSmall);
                 writer.WriteReference(SerializeHandle(stringMap, genericParam.Name), metadataSizes.StringReferenceIsSmall);
-                if (version.Major >= 3)
+                if (!(version.Major == 2 && version.Minor == 0))
                 {
                     writer.WriteReference(genericParam.Type, metadataSizes.TypeDefOrRefCodedIndexIsSmall);
                 }

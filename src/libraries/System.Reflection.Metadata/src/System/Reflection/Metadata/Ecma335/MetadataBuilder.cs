@@ -25,7 +25,7 @@ namespace System.Reflection.Metadata.Ecma335
                 _blobHeapSize,
                 _guidBuilder.Count);
 
-            var sizes = new MetadataSizes(GetRowCounts(), externalRowCounts, heapSizes, metadataVersionByteCount, isStandaloneDebugMetadata);
+            var sizes = new MetadataSizes(GetRowCounts(), externalRowCounts, heapSizes, metadataVersionByteCount, isStandaloneDebugMetadata, version);
 
             return new SerializedMetadata(sizes, version, stringHeapBuilder, stringMap);
         }

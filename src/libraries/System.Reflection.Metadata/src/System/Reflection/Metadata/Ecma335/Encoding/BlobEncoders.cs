@@ -1171,49 +1171,11 @@ namespace System.Reflection.Metadata.Ecma335
             Builder.WriteCompressedInteger(parameterIndex);
         }
 
-        public void ConstValueType(PrimitiveTypeCode type, ulong value)
+        public void ConstValueType(out SignatureTypeEncoder type, out ScalarEncoder value)
         {
             Builder.WriteByte((byte)SignatureTypeCode.ConstTypeArgument);
-            Builder.WriteCompressedInteger((int)type);
-            byte[] buffer;
-
-            unsafe
-            {
-                fixed (void* ptr = buffer)
-                {
-                    switch (type)
-                    {
-                        case PrimitiveTypeCode.Boolean:
-                        case PrimitiveTypeCode.Byte:
-                        case PrimitiveTypeCode.SByte:
-                            buffer = new byte[1];
-                            Unsafe.Copy(ptr, ref Unsafe.As<ulong, byte>(ref value));
-                            break;
-                        case PrimitiveTypeCode.Char:
-                        case PrimitiveTypeCode.Int16:
-                        case PrimitiveTypeCode.UInt16:
-                            buffer = new byte[2];
-                            Unsafe.Copy(ptr, ref Unsafe.As<ulong, ushort>(ref value));
-                            break;
-                        case PrimitiveTypeCode.Int32:
-                        case PrimitiveTypeCode.UInt32:
-                        case PrimitiveTypeCode.Single:
-                            buffer = new byte[4];
-                            Unsafe.Copy(ptr, ref Unsafe.As<ulong, uint>(ref value));
-                            break;
-                        case PrimitiveTypeCode.Int64:
-                        case PrimitiveTypeCode.UInt64:
-                        case PrimitiveTypeCode.Double:
-                            buffer = new byte[8];
-                            Unsafe.Copy(ptr, ref value);
-                            break;
-
-                        default:
-                            Throw.ArgumentOutOfRange(nameof(type));
-                            return;
-                    }
-                }
-            }
+            type = new SignatureTypeEncoder(Builder);
+            value = new ScalarEncoder(Builder);
         }
 
         /// <summary>

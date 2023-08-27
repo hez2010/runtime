@@ -106,7 +106,8 @@ namespace System.Reflection.Metadata.Ecma335
             ImmutableArray<int> externalRowCounts,
             ImmutableArray<int> heapSizes,
             int metadataVersionByteCount,
-            bool isStandaloneDebugMetadata)
+            bool isStandaloneDebugMetadata,
+            Version version)
         {
             Debug.Assert(rowCounts.Length == MetadataTokens.TableCount);
             Debug.Assert(externalRowCounts.Length == MetadataTokens.TableCount);
@@ -295,7 +296,7 @@ namespace System.Reflection.Metadata.Ecma335
             size += GetTableSize(TableIndex.ExportedType, 8 + stringReferenceSize + stringReferenceSize + implementationCodedIndexSize);
             size += GetTableSize(TableIndex.ManifestResource, 8 + stringReferenceSize + implementationCodedIndexSize);
             size += GetTableSize(TableIndex.NestedClass, typeDefReferenceSize + typeDefReferenceSize);
-            size += GetTableSize(TableIndex.GenericParam, 4 + typeOrMethodDefCodedIndexSize + stringReferenceSize);
+            size += GetTableSize(TableIndex.GenericParam, 4 + typeOrMethodDefCodedIndexSize + stringReferenceSize + (version.Major == 2 && version.Minor == 0 ? 0 : typeDefOrRefCodedIndexSize));
             size += GetTableSize(TableIndex.MethodSpec, methodDefOrRefCodedIndexSize + blobReferenceSize);
             size += GetTableSize(TableIndex.GenericParamConstraint, genericParamReferenceSize + typeDefOrRefCodedIndexSize);
 

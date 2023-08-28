@@ -363,30 +363,38 @@ void SplitTypeAndValue(CQuickBytes* typeBuffer, CQuickBytes* valueBuffer, LPCSTR
 UINT64 ParseValue(TypeHandle th, LPCSTR szValue)
 {
     UINT64 value = 0;
-    LPSTR stop = NULL;
-    if (th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__SBYTE)))
+
+    if (szValue == NULL)
+    {
+        return 0;
+    }
+    else if (strstr(szValue, "0x") == szValue)
+    {
+        value = strtoull(szValue + 2, NULL, 16);
+    }
+    else if (th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__SBYTE)))
         || th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__CHAR)))
         || th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__INT16)))
         || th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__INT32)))
         || th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__INT64))))
     {
-        value = (UINT64)strtoll(szValue, &stop, 10);
+        value = (UINT64)strtoll(szValue, NULL, 10);
     }
     else if (th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__BYTE)))
         || th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__UINT16)))
         || th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__UINT32)))
         || th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__UINT64))))
     {
-        value = strtoull(szValue, &stop, 10);
+        value = strtoull(szValue, NULL, 10);
     }
     else if (th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__SINGLE))))
     {
-        float floatValue = strtof(szValue, &stop);
+        float floatValue = strtof(szValue, NULL);
         memcpy(&value, &floatValue, sizeof(float));
     }
     else if (th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__DOUBLE))))
     {
-        double doubleValue = strtod(szValue, &stop);
+        double doubleValue = strtod(szValue, NULL);
         memcpy(&value, &doubleValue, sizeof(double));
     }
     else if (th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__BOOLEAN))))

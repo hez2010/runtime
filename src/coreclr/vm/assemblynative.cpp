@@ -335,6 +335,68 @@ extern "C" void QCALLTYPE AssemblyNative_GetLocation(QCall::AssemblyHandle pAsse
     END_QCALL;
 }
 
+void SplitTypeAndValue(CQuickBytes* typeBuffer, CQuickBytes* valueBuffer, LPCSTR &szTypeName, LPCSTR &szValue)
+{
+    szValue = NULL;
+
+    if (szTypeName[strlen(szTypeName) - 1] == ')')
+    {
+        // this is a const value, we need to drop the value part to get the type
+        // then we will be able to make a const value type
+        const char* delimiter = strstr(szTypeName, "(");
+        if (delimiter == NULL)
+        {
+            return;
+        }
+
+        int valueLength = (int)(strlen(szTypeName) - (delimiter - szTypeName) - 2);
+        if (valueLength <= 0)
+        {
+            return;
+        }
+
+        szValue = valueBuffer->SetStringNoThrow(delimiter + 1, valueLength);
+        szTypeName = typeBuffer->SetStringNoThrow(szTypeName, delimiter - szTypeName);
+    }
+}
+
+UINT64 ParseValue(TypeHandle th, LPCSTR szValue)
+{
+    UINT64 value = 0;
+    LPSTR stop = NULL;
+    if (th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__SBYTE)))
+        || th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__CHAR)))
+        || th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__INT16)))
+        || th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__INT32)))
+        || th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__INT64))))
+    {
+        value = (UINT64)strtoll(szValue, &stop, 10);
+    }
+    else if (th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__BYTE)))
+        || th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__UINT16)))
+        || th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__UINT32)))
+        || th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__UINT64))))
+    {
+        value = strtoull(szValue, &stop, 10);
+    }
+    else if (th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__SINGLE))))
+    {
+        float floatValue = strtof(szValue, &stop);
+        memcpy(&value, &floatValue, sizeof(float));
+    }
+    else if (th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__DOUBLE))))
+    {
+        double doubleValue = strtod(szValue, &stop);
+        memcpy(&value, &doubleValue, sizeof(double));
+    }
+    else if (th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__BOOLEAN))))
+    {
+        value = strcmp(szValue, "true") ? 1 : 0;
+    }
+
+    return value;
+}
+
 extern "C" void QCALLTYPE AssemblyNative_GetTypeCore(QCall::AssemblyHandle assemblyHandle,
     LPCSTR szTypeName,
     LPCSTR * rgszNestedTypeNames,
@@ -355,6 +417,11 @@ extern "C" void QCALLTYPE AssemblyNative_GetTypeCore(QCall::AssemblyHandle assem
     TypeHandle th = TypeHandle();
     Module* pManifestModule = pAssembly->GetModule();
     ClassLoader* pClassLoader = pAssembly->GetLoader();
+    
+    CQuickBytes typeBuffer;
+    CQuickBytes valueBuffer;
+    LPCSTR szValue = NULL;
+    SplitTypeAndValue(&typeBuffer, &valueBuffer, szTypeName, szValue);
 
     NameHandle typeName(pManifestModule, mdtBaseType);
 
@@ -381,6 +448,10 @@ extern "C" void QCALLTYPE AssemblyNative_GetTypeCore(QCall::AssemblyHandle assem
 
     if (!th.IsNull())
     {
+        if (szValue != NULL)
+        {
+            th = pClassLoader->LoadConstValueTypeThrowing(th, ParseValue(th, szValue));
+        }
         GCX_COOP();
         retType.Set(th.GetManagedClassObject());
     }
@@ -408,6 +479,13 @@ extern "C" void QCALLTYPE AssemblyNative_GetTypeCoreIgnoreCase(QCall::AssemblyHa
     TypeHandle th = TypeHandle();
     Module* pManifestModule = pAssembly->GetModule();
     ClassLoader* pClassLoader = pAssembly->GetLoader();
+    
+    LPCSTR szValue = NULL;
+    StackSString name(wszTypeName);
+    LPCSTR szTypeName = name.GetUTF8();
+    CQuickBytes typeBuffer;
+    CQuickBytes valueBuffer;
+    SplitTypeAndValue(&typeBuffer, &valueBuffer, szTypeName, szValue);
 
     NameHandle typeName(pManifestModule, mdtBaseType);
 
@@ -417,7 +495,10 @@ extern "C" void QCALLTYPE AssemblyNative_GetTypeCoreIgnoreCase(QCall::AssemblyHa
     for (int32_t i = -1; i < cNestedTypeNamesLength; i++)
     {
         // each extra name represents one more level of nesting
-        StackSString name((i == -1) ? wszTypeName : rgwszNestedTypeNames[i]);
+        if (i != -1)
+        {
+            name = StackSString(rgwszNestedTypeNames[i]);
+        }
 
         // The type name is expected to be lower-cased by the caller for case-insensitive lookups
         name.LowerCase();
@@ -443,6 +524,10 @@ extern "C" void QCALLTYPE AssemblyNative_GetTypeCoreIgnoreCase(QCall::AssemblyHa
 
     if (!th.IsNull())
     {
+        if (szValue != NULL)
+        {
+            th = pClassLoader->LoadConstValueTypeThrowing(th, ParseValue(th, szValue));
+        }
          GCX_COOP();
          retType.Set(th.GetManagedClassObject());
     }

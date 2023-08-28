@@ -3566,7 +3566,8 @@ ClrDataTypeInstance::GetDefinition(
                                       defType);
         }
 
-        else if (m_typeHandle.IsTypeDesc() && m_typeHandle.AsTypeDesc()->HasTypeParam())
+        else if (m_typeHandle.IsTypeDesc() && m_typeHandle.AsTypeDesc()->HasTypeParam()
+            && !(m_typeHandle.AsTypeDesc()->IsConstValue() || m_typeHandle.AsTypeDesc()->IsConstGenericVariable()))
         {
             // HasTypeParam is true for - ParamTypeDesc (BYREF, PTR)
             defType = m_typeHandle.AsTypeDesc()->GetTypeParam();

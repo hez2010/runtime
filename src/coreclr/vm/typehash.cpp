@@ -224,7 +224,7 @@ static DWORD HashTypeHandle(TypeHandle t)
 
     DWORD retVal = 0;
 
-    if (t.HasTypeParam())
+    if (!(t.IsConstValue() || t.IsConstGenericVariable()) && t.HasTypeParam())
     {
         retVal = HashParamType(t.GetInternalCorElementType(), t.GetTypeParam());
     }

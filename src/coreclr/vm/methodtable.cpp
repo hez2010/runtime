@@ -5044,7 +5044,7 @@ VOID DoAccessibilityCheckForConstraint(MethodTable *pAskingMT, TypeHandle thCons
     {
         TypeDesc *pTypeDesc = thConstraint.AsTypeDesc();
 
-        if (pTypeDesc->IsGenericVariable())
+        if (pTypeDesc->IsGenericVariable() || pTypeDesc->IsConstValue())
         {
             // since the metadata respresents a generic type param constraint as an index into
             // the declaring type's list of generic params, it is structurally impossible

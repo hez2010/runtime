@@ -110,7 +110,7 @@ BOOL TypeHandle::HasTypeParam() const {
         return FALSE;
 
     CorElementType etype = AsTypeDesc()->GetInternalCorElementType();
-    return(CorTypeInfo::IsModifier_NoThrow(etype) || etype == ELEMENT_TYPE_VALUETYPE);
+    return(CorTypeInfo::IsModifier_NoThrow(etype) || etype == ELEMENT_TYPE_VALUETYPE || IsConstValue() || IsConstGenericVariable());
 }
 
 Module *TypeHandle::GetDefiningModuleForOpenType() const
@@ -127,7 +127,7 @@ Module *TypeHandle::GetDefiningModuleForOpenType() const
         goto Exit;
     }
 
-    if (HasTypeParam())
+    if (!(IsConstValue() || IsConstGenericVariable()) && HasTypeParam())
     {
         returnValue = GetTypeParam().GetDefiningModuleForOpenType();
     }
@@ -145,7 +145,7 @@ BOOL TypeHandle::ContainsGenericVariables(BOOL methodOnly /*=FALSE*/) const
     STATIC_CONTRACT_NOTHROW;
     SUPPORTS_DAC;
 
-    if (HasTypeParam())
+    if (!(IsConstValue() || IsConstGenericVariable()) && HasTypeParam())
     {
         return GetTypeParam().ContainsGenericVariables(methodOnly);
     }

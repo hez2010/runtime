@@ -113,7 +113,7 @@ public:
     // VALUETYPE
     BOOL IsNativeValueType();
 
-    // Is actually ParamTypeDesc (BYREF, PTR)
+    // Is actually ParamTypeDesc (BYREF, PTR) or ConstValueTypeDesc or const TypeVarTypeDesc
     BOOL HasTypeParam();
 
     void DoRestoreTypeKey();
@@ -470,59 +470,6 @@ public:
         return m_index;
     }
 
-    TypeHandle GetType()
-    {
-        LIMITED_METHOD_CONTRACT;
-        SUPPORTS_DAC;
-        
-        if (m_type.IsNull() && RidFromToken(m_typeToken))
-        {
-            PTR_Module pModule = GetModule();
-
-            switch (TypeFromToken(m_typeToken))
-            {
-                case mdtTypeDef:
-                    m_type = pModule->LookupTypeDef(m_typeToken);
-                    break;
-                case mdtTypeRef:
-                    m_type = pModule->LookupTypeRef(m_typeToken);
-                    break;
-                case mdtTypeSpec:
-                    ULONG cSig;
-                    PCCOR_SIGNATURE pSig;
-                    IMDInternalImport *pInternalImport = pModule->GetMDImport();
-                    if (!FAILED(pInternalImport->GetTypeSpecFromToken(m_typeToken, &pSig, &cSig)))
-                    {
-                        SigPointer sigPtr(pSig, cSig);
-                        SigTypeContext typeContext;
-                        uint32_t index;
-                        if (!FAILED(sigPtr.GetData(&index)))
-                        {
-                            if (TypeFromToken(m_typeOrMethodDef) == mdtTypeDef)
-                            {
-                                SigTypeContext::InitTypeContext(GetModule()->LookupTypeDef(m_typeOrMethodDef), &typeContext);
-                                if (index < typeContext.m_classInst.GetNumArgs())
-                                {
-                                    m_type = typeContext.m_classInst[index];
-                                }
-                            }
-                            else
-                            {
-                                SigTypeContext::InitTypeContext(GetModule()->LookupMethodDef(m_typeOrMethodDef), &typeContext);
-                                if (index < typeContext.m_methodInst.GetNumArgs())
-                                {
-                                    m_type = typeContext.m_methodInst[index];
-                                }
-                            }
-                        }
-                    }
-                    break;
-            }
-        }
-
-        return m_type;
-    }
-
     mdGenericParam GetToken()
     {
         LIMITED_METHOD_CONTRACT;
@@ -579,6 +526,7 @@ public:
     // Load the owning type. Note that the result is not guaranteed to be full loaded
     MethodDesc * LoadOwnerMethod();
     TypeHandle LoadOwnerType();
+    TypeHandle GetType();
 
     BOOL ConstraintsLoaded() { LIMITED_METHOD_CONTRACT; return m_numConstraints != (DWORD)-1; }
 

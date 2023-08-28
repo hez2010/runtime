@@ -736,7 +736,7 @@ void TypeString::AppendType(TypeNameBuilder& tnb, TypeHandle ty, Instantiation t
     //   element_ty[*] (1-d, ARRAY)
     //   element_ty[,] (2-d, ARRAY) etc
     // or a pointer (*) or byref (&)
-    if (ty.HasTypeParam())
+    if (!(ty.IsConstValue() || ty.IsConstGenericVariable()) && ty.HasTypeParam())
     {
         if (ty.GetSignatureCorElementType() != ELEMENT_TYPE_VALUETYPE)
         {

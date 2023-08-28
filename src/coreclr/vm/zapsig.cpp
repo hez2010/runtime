@@ -46,7 +46,7 @@ BOOL ZapSig::GetSignatureForTypeDesc(TypeDesc * desc, SigBuilder * pSigBuilder)
 
     pSigBuilder->AppendElementType(elemType);
 
-    if (desc->HasTypeParam())
+    if (!(desc->IsConstValue() || desc->IsConstGenericVariable()) && desc->HasTypeParam())
     {
         if (!this->GetSignatureForTypeHandle(desc->GetTypeParam(), pSigBuilder))
             return FALSE;

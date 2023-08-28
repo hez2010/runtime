@@ -64,7 +64,7 @@ PTR_Module TypeDesc::GetLoaderModule()
     STATIC_CONTRACT_FORBID_FAULT;
     SUPPORTS_DAC;
 
-    if (HasTypeParam())
+    if (!(IsConstValue() || IsConstGenericVariable()) && HasTypeParam())
     {
         return GetRootTypeParam().GetLoaderModule();
     }
@@ -96,7 +96,7 @@ BOOL TypeDesc::IsSharedByGenericInstantiations()
 {
     LIMITED_METHOD_DAC_CONTRACT;
 
-    if (HasTypeParam())
+    if (!(IsConstValue() || IsConstGenericVariable()) && HasTypeParam())
     {
         return GetRootTypeParam().IsCanonicalSubtype();
     }
@@ -138,7 +138,7 @@ PTR_Module TypeDesc::GetModule() {
     // Note here we are making the assumption that a typeDesc lives in
     // the classloader of its element type.
 
-    if (HasTypeParam())
+    if (!(IsConstValue() || IsConstGenericVariable()) && HasTypeParam())
     {
         return GetRootTypeParam().GetModule();
     }
@@ -314,7 +314,7 @@ BOOL TypeDesc::HasTypeParam()
     SUPPORTS_DAC;
     return CorTypeInfo::IsModifier_NoThrow(GetInternalCorElementType()) ||
            GetInternalCorElementType() == ELEMENT_TYPE_VALUETYPE ||
-           GetInternalCorElementType() == ELEMENT_TYPE_CTARG ||
+           IsConstValue() ||
            IsConstGenericVariable();
 }
 
@@ -757,6 +757,70 @@ void TypeDesc::DoFullyLoad(Generics::RecursionGraph *pVisited, ClassLoadLevel le
             break;
     }
 #endif
+}
+
+TypeHandle TypeVarTypeDesc::GetType()
+{
+    LIMITED_METHOD_CONTRACT;
+    
+    if (m_type.IsNull() && RidFromToken(m_typeToken))
+    {
+        PTR_Module pModule = GetModule();
+
+        switch (TypeFromToken(m_typeToken))
+        {
+            case mdtTypeDef:
+                m_type = pModule->LookupTypeDef(m_typeToken);
+                break;
+            case mdtTypeRef:
+                m_type = pModule->LookupTypeRef(m_typeToken);
+                break;
+            case mdtTypeSpec:
+                ULONG cSig;
+                PCCOR_SIGNATURE pSig;
+                IMDInternalImport *pInternalImport = pModule->GetMDImport();
+                if (!FAILED(pInternalImport->GetTypeSpecFromToken(m_typeToken, &pSig, &cSig)))
+                {
+                    SigPointer sigPtr(pSig, cSig);
+                    CorElementType typ = ELEMENT_TYPE_END;
+                    if (!FAILED(sigPtr.GetElemType(&typ)))
+                    {
+                        if ((typ < ELEMENT_TYPE_MAX) &&
+                           (CorTypeInfo::IsPrimitiveType_NoThrow(typ) || (typ == ELEMENT_TYPE_STRING) || (typ == ELEMENT_TYPE_OBJECT)))
+                        {
+                            m_type = TypeHandle(CoreLibBinder::GetElementType(typ));
+                        }
+                        else if (typ == ELEMENT_TYPE_VAR || typ == ELEMENT_TYPE_MVAR)
+                        {
+                            uint32_t index;
+                            if (!FAILED(sigPtr.GetData(&index)))
+                            {
+                                SigTypeContext typeContext;
+                                if (TypeFromToken(m_typeOrMethodDef) == mdtTypeDef)
+                                {
+                                    SigTypeContext::InitTypeContext(GetModule()->LookupTypeDef(m_typeOrMethodDef), &typeContext);
+                                    if (index < typeContext.m_classInst.GetNumArgs())
+                                    {
+                                        m_type = typeContext.m_classInst[index];
+                                    }
+                                }
+                                else
+                                {
+                                    SigTypeContext::InitTypeContext(GetModule()->LookupMethodDef(m_typeOrMethodDef), &typeContext);
+                                    if (index < typeContext.m_methodInst.GetNumArgs())
+                                    {
+                                        m_type = typeContext.m_methodInst[index];
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                break;
+        }
+    }
+
+    return m_type;
 }
 
 #ifndef DACCESS_COMPILE

@@ -499,7 +499,7 @@ public:
 
     Module* GetDefiningModuleForOpenType() const;
 
-    // Is type that has a type parameter (ARRAY, SZARRAY, BYREF, PTR)
+    // Is type that has a type parameter (ARRAY, SZARRAY, BYREF, PTR, CTARG, const VAR/MVAR)
     BOOL HasTypeParam() const;
 
     BOOL IsRestored() const;

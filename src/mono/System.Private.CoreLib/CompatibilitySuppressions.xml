@@ -25,25 +25,7 @@
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:System.Type.get_ConstValueParameterType</Target>
-    <Left>ref/net8.0/System.Private.CoreLib.dll</Left>
-    <Right>lib/net8.0/System.Private.CoreLib.dll</Right>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:System.Type.get_ConstValueType</Target>
-    <Left>ref/net8.0/System.Private.CoreLib.dll</Left>
-    <Right>lib/net8.0/System.Private.CoreLib.dll</Right>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:System.Type.get_IsConstValue</Target>
-    <Left>ref/net8.0/System.Private.CoreLib.dll</Left>
-    <Right>lib/net8.0/System.Private.CoreLib.dll</Right>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:System.Type.get_IsConstValueParameter</Target>
     <Left>ref/net8.0/System.Private.CoreLib.dll</Left>
     <Right>lib/net8.0/System.Private.CoreLib.dll</Right>
   </Suppression>

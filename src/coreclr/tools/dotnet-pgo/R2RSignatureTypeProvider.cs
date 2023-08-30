@@ -52,6 +52,11 @@ namespace Microsoft.Diagnostics.Tools.Pgo
             throw new System.NotImplementedException();
         }
 
+        TypeDesc ISignatureTypeProvider<TypeDesc, R2RSigProviderContext>.GetConstValueType(TypeDesc type, object value)
+        {
+            throw new NotImplementedException();
+        }
+
         TypeDesc ISignatureTypeProvider<TypeDesc, R2RSigProviderContext>.GetFunctionPointerType(MethodSignature<TypeDesc> signature)
         {
             // Cannot exist in entrypoint definition

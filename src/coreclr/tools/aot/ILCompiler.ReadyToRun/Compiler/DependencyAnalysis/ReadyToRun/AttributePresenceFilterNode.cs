@@ -184,6 +184,11 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
                 return DummyType.Instance;
             }
 
+            public DummyType GetConstValueType(DummyType elementType, object value)
+            {
+                return DummyType.Instance;
+            }
+
             public DummyType GetTypeFromSpecification(MetadataReader reader, DummyGenericContext genericContext, TypeSpecificationHandle handle, byte rawTypeKind)
             {
                 return DummyType.Instance;

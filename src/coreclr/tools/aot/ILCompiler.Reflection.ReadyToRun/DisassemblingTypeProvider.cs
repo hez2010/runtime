@@ -203,6 +203,7 @@ namespace ILCompiler.Reflection.ReadyToRun
         public abstract string GetGenericMethodParameter(TGenericContext genericContext, int index);
         public abstract string GetGenericTypeParameter(TGenericContext genericContext, int index);
         public abstract string GetTypeFromSpecification(MetadataReader reader, TGenericContext genericContext, TypeSpecificationHandle handle, byte rawTypeKind);
+        public virtual string GetConstValueType(string type, object value) => $"{type} ({value})";
     }
 
     // Test implementation of ISignatureTypeProvider<TType, TGenericContext> that uses strings in ilasm syntax as TType.

@@ -54,8 +54,8 @@ namespace System.Reflection.TypeLoading
 
         public abstract override bool IsFunctionPointer { get; }
         public abstract override bool IsUnmanagedFunctionPointer { get; }
-        public virtual bool IsConstValue => false;
-        public virtual object? ConstValue => null;
+        public override bool IsConstValue => false;
+        public override object? ConstValue => null;
 
         public override Type[] GetFunctionPointerCallingConventions()
         {

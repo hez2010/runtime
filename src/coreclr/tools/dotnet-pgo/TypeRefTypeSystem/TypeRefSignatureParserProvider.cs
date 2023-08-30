@@ -38,6 +38,8 @@ namespace Microsoft.Diagnostics.Tools.Pgo.TypeRefTypeSystem
 
             public TypeDesc GetFunctionPointerType(MethodSignature<TypeDesc> signature) => null;
 
+            public TypeDesc GetConstValueType(TypeDesc type, object value) => null;
+
             public TypeDesc GetGenericInstantiation(TypeDesc genericType, ImmutableArray<TypeDesc> typeArguments)
             {
                 if (genericType is TypeRefTypeSystemType typeRefType)

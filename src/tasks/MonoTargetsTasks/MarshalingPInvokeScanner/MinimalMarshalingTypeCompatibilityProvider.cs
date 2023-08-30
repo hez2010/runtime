@@ -76,6 +76,7 @@ namespace MonoTargetsTasks
         public Compatibility GetArrayType(Compatibility elementType, ArrayShape shape) => Compatibility.Incompatible;
         public Compatibility GetByReferenceType(Compatibility elementType) => Compatibility.Incompatible;
         public Compatibility GetFunctionPointerType(MethodSignature<Compatibility> signature) => Compatibility.Compatible;
+        public Compatibility GetConstValueType(Compatibility elementType, object? value) => Compatibility.Compatible;
         public Compatibility GetGenericInstantiation(Compatibility genericType, ImmutableArray<Compatibility> typeArguments) => genericType;
         public Compatibility GetGenericMethodParameter(object genericContext, int index) => Compatibility.Incompatible;
         public Compatibility GetGenericTypeParameter(object genericContext, int index) => Compatibility.Incompatible;

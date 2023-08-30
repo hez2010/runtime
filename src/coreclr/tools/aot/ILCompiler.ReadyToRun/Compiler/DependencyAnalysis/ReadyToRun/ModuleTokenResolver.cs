@@ -409,6 +409,11 @@ namespace ILCompiler.DependencyAnalysis.ReadyToRun
                 return DummyTypeInfo.Instance;
             }
 
+            public DummyTypeInfo GetConstValueType(DummyTypeInfo elementType, object value)
+            {
+                return DummyTypeInfo.Instance;
+            }
+
             public DummyTypeInfo GetTypeFromDefinition(MetadataReader reader, TypeDefinitionHandle handle, byte rawTypeKind)
             {
                 // Type definition tokens outside of the versioning bubble are useless.

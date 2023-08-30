@@ -114,58 +114,311 @@
 {
 }
 
-.class public sequential ansi sealed beforefieldinit System.ValueArray`2<T, literal int32 Length>
-    extends [System.Runtime]System.ValueType
+.class public sequential ansi sealed beforefieldinit System.ValueArray`2<T,literal int32 X>
+       extends [System.Runtime]System.ValueType
 {
-    .field private !T elem
-
-    .method public hidebysig specialname instance !T& get_Item (int32 index) cil managed 
+  .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableContextAttribute::.ctor(uint8) = ( 01 00 01 00 00 )
+  .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8) = ( 01 00 00 00 00 )
+  .custom instance void [System.Runtime]System.Reflection.DefaultMemberAttribute::.ctor(string) = ( 01 00 04 49 74 65 6D 00 00 )                      // ...Item..
+  .param type T
+    .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8) = ( 01 00 02 00 00 )
+  .param type X
+    .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8) = ( 01 00 02 00 00 )
+  .class sequential ansi sealed nested public beforefieldinit Enumerator<T,literal int32 X>
+         extends [System.Runtime]System.ValueType
+  {
+    .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8) = ( 01 00 00 00 00 )
+    .custom instance void [System.Runtime]System.Runtime.CompilerServices.IsByRefLikeAttribute::.ctor() = ( 01 00 00 00 )
+    .custom instance void [System.Runtime]System.ObsoleteAttribute::.ctor(string,
+                                                                                  bool) = ( 01 00 52 54 79 70 65 73 20 77 69 74 68 20 65 6D   // ..RTypes with em
+                                                                                            62 65 64 64 65 64 20 72 65 66 65 72 65 6E 63 65   // bedded reference
+                                                                                            73 20 61 72 65 20 6E 6F 74 20 73 75 70 70 6F 72   // s are not suppor
+                                                                                            74 65 64 20 69 6E 20 74 68 69 73 20 76 65 72 73   // ted in this vers
+                                                                                            69 6F 6E 20 6F 66 20 79 6F 75 72 20 63 6F 6D 70   // ion of your comp
+                                                                                            69 6C 65 72 2E 01 00 00 )                         // iler....
+    .custom instance void [System.Runtime]System.Runtime.CompilerServices.CompilerFeatureRequiredAttribute::.ctor(string) = ( 01 00 0A 52 65 66 53 74 72 75 63 74 73 00 00 )    // ...RefStructs..
+    .param type T
+      .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8) = ( 01 00 02 00 00 )
+    .param type X
+      .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8) = ( 01 00 02 00 00 )
+    .field private initonly valuetype System.ValueArray`2<!T,!X>& _array
+    .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8[]) = ( 01 00 03 00 00 00 00 01 00 00 00 )
+    .field private int32 _index
+    .method public hidebysig specialname rtspecialname
+            instance void  .ctor(valuetype System.ValueArray`2<!T,!X>& 'array') cil managed
     {
-        .custom instance void [System.Runtime]System.Diagnostics.CodeAnalysis.UnscopedRefAttribute::.ctor() = (01 00 00 00)
-        .maxstack 8
+      .param [1]
+      .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8[]) = ( 01 00 03 00 00 00 00 01 00 00 00 )
+      // Code size       15 (0xf)
+      .maxstack  8
+      IL_0000:  ldarg.0
+      IL_0001:  ldc.i4.m1
+      IL_0002:  stfld      int32 valuetype System.ValueArray`2/Enumerator<!T,!X>::_index
+      IL_0007:  ldarg.0
+      IL_0008:  ldarg.1
+      IL_0009:  stfld      valuetype System.ValueArray`2<!0,!1>& valuetype System.ValueArray`2/Enumerator<!T,!X>::_array      IL_000e:  ret
+    } // end of method Enumerator::.ctor
 
-        ldarg.1
-        ldc.i4.0
-        blt.s OutOfRange
-
-        ldarg.1
-        ldarg.0
-        call instance int32 valuetype System.ValueArray`2<!T, !Length>::get_Length()
-        blt.s GetItem
-
-        OutOfRange:
-        call void valuetype System.ValueArray`2<!T, !Length>::ThrowIndexOutOfRange()
-
-        GetItem:
-        ldarg.0
-        ldflda !0 valuetype System.ValueArray`2<!T, !Length>::elem
-        ldarg.1
-        call !!0& [System.Runtime]System.Runtime.CompilerServices.Unsafe::Add<!T>(!!0&, int32)
-        ret
-    }
-
-    .method public hidebysig specialname instance int32 get_Length () cil managed 
+    .method public hidebysig instance bool
+            MoveNext() cil managed
     {
-        .maxstack 8
-        ldtoken !Length
-        ret
-    }
+      // Code size       28 (0x1c)
+      .maxstack  3
+      .locals init (int32 V_0)
+      IL_0000:  ldarg.0
+      IL_0001:  ldarg.0
+      IL_0002:  ldfld      int32 valuetype System.ValueArray`2/Enumerator<!T,!X>::_index
+      IL_0007:  ldc.i4.1
+      IL_0008:  add
+      IL_0009:  stloc.0
+      IL_000a:  ldloc.0
+      IL_000b:  stfld      int32 valuetype System.ValueArray`2/Enumerator<!T,!X>::_index
+      IL_0010:  ldloc.0
+      IL_0011:  ldtoken    !X
+      IL_0016:  bge.s      IL_001a
 
-    .method private hidebysig static void ThrowIndexOutOfRange () cil managed 
+      IL_0018:  ldc.i4.1
+      IL_0019:  ret
+
+      IL_001a:  ldc.i4.0
+      IL_001b:  ret
+    } // end of method Enumerator::MoveNext
+
+    .method public hidebysig specialname
+            instance !T  get_Current() cil managed
     {
-        .maxstack 8
+      .custom instance void [System.Runtime]System.Runtime.CompilerServices.IsReadOnlyAttribute::.ctor() = ( 01 00 00 00 )
+      // Code size       18 (0x12)
+      .maxstack  8
+      IL_0000:  ldarg.0
+      IL_0001:  ldfld      valuetype System.ValueArray`2<!0,!1>& valuetype System.ValueArray`2/Enumerator<!T,!X>::_array      IL_0006:  ldarg.0
+      IL_0007:  ldfld      int32 valuetype System.ValueArray`2/Enumerator<!T,!X>::_index
+      IL_000c:  call       instance !0 valuetype System.ValueArray`2<!T,!X>::get_Item(int32)
+      IL_0011:  ret
+    } // end of method Enumerator::get_Current
 
-        newobj instance void [System.Runtime]System.IndexOutOfRangeException::.ctor()
-        throw
-    }
-
-    .property instance !T& Item(int32 index)
+    .property instance callconv(8) !T Current()
     {
-        .get instance !0& System.ValueArray`2::get_Item(int32)
-    }
+      .get instance !T System.ValueArray`2/Enumerator::get_Current()
+    } // end of property Enumerator::Current
+  } // end of class Enumerator
 
-    .property instance int32 Length()
-    {
-        .get instance int32 System.ValueArray`2::get_Length()
-    }
-}
+  .field private !T _elem
+  .method public hidebysig specialname instance !T
+          get_Item(int32 index) cil managed
+  {
+    // Code size       36 (0x24)
+    .maxstack  8
+    IL_0000:  ldarg.1
+    IL_0001:  ldc.i4.0
+    IL_0002:  blt.s      IL_001e
+
+    IL_0004:  ldarg.1
+    IL_0005:  ldtoken    !X
+    IL_000a:  bge.s      IL_001e
+
+    IL_000c:  ldarg.0
+    IL_000d:  ldflda     !0 valuetype System.ValueArray`2<!T,!X>::_elem
+    IL_0012:  ldarg.1
+    IL_0013:  call       !!0& [System.Runtime]System.Runtime.CompilerServices.Unsafe::Add<!T>(!!0&,
+                                                                                                      int32)
+    IL_0018:  ldobj      !T
+    IL_001d:  ret
+
+    IL_001e:  newobj     instance void [System.Runtime]System.IndexOutOfRangeException::.ctor()
+    IL_0023:  throw
+  } // end of method ValueArray`2::get_Item
+
+  .method public hidebysig specialname instance void
+          set_Item(int32 index,
+                   !T 'value') cil managed
+  {
+    // Code size       36 (0x24)
+    .maxstack  8
+    IL_0000:  ldarg.1
+    IL_0001:  ldc.i4.0
+    IL_0002:  blt.s      IL_001e
+
+    IL_0004:  ldarg.1
+    IL_0005:  ldtoken    !X
+    IL_000a:  bge.s      IL_001e
+
+    IL_000c:  ldarg.0
+    IL_000d:  ldflda     !0 valuetype System.ValueArray`2<!T,!X>::_elem
+    IL_0012:  ldarg.1
+    IL_0013:  call       !!0& [System.Runtime]System.Runtime.CompilerServices.Unsafe::Add<!T>(!!0&,
+                                                                                                      int32)
+    IL_0018:  ldarg.2
+    IL_0019:  stobj      !T
+    IL_001e:  newobj     instance void [System.Runtime]System.IndexOutOfRangeException::.ctor()
+    IL_0023:  throw
+  } // end of method ValueArray`2::set_Item
+
+  .method public hidebysig specialname instance int32
+          get_Length() cil managed
+  {
+    .custom instance void [System.Runtime]System.Runtime.CompilerServices.IsReadOnlyAttribute::.ctor() = ( 01 00 00 00 )
+    // Code size       6 (0x6)
+    .maxstack  8
+    IL_0000:  ldtoken    !X
+    IL_0005:  ret
+  } // end of method ValueArray`2::get_Length
+
+  .method public hidebysig instance valuetype System.ValueArray`2/Enumerator<!T,!X>
+          GetEnumerator() cil managed
+  {
+    .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableContextAttribute::.ctor(uint8) = ( 01 00 00 00 00 )
+    .custom instance void [System.Runtime]System.Diagnostics.CodeAnalysis.UnscopedRefAttribute::.ctor() = ( 01 00 00 00 )
+    // Code size       7 (0x7)
+    .maxstack  8
+    IL_0000:  ldarg.0
+    IL_0001:  newobj     instance void valuetype System.ValueArray`2/Enumerator<!T,!X>::.ctor(valuetype System.ValueArray`2<!0,!1>&)
+    IL_0006:  ret
+  } // end of method ValueArray`2::GetEnumerator
+
+  .method public hidebysig instance void
+          CopyTo([in] valuetype System.ValueArray`2<!T,!X>& destination) cil managed
+  {
+    .param [1]
+    .custom instance void [System.Runtime]System.Runtime.CompilerServices.ScopedRefAttribute::.ctor() = ( 01 00 00 00 )
+    .custom instance void [System.Runtime]System.Runtime.CompilerServices.RequiresLocationAttribute::.ctor() = ( 01 00 00 00 )
+    .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8[]) = ( 01 00 03 00 00 00 00 01 00 00 00 )
+    // Code size       45 (0x2d)
+    .maxstack  8
+    IL_0000:  ldarg.0
+    IL_0001:  ldflda     !0 valuetype System.ValueArray`2<!T,!X>::_elem
+    IL_0006:  call       void* [System.Runtime]System.Runtime.CompilerServices.Unsafe::AsPointer<!T>(!!0&)
+    IL_000b:  ldarg.1
+    IL_000c:  ldflda     !0 valuetype System.ValueArray`2<!T,!X>::_elem
+    IL_0011:  call       !!0& [System.Runtime]System.Runtime.CompilerServices.Unsafe::AsRef<!T>(!!0&)
+    IL_0016:  call       void* [System.Runtime]System.Runtime.CompilerServices.Unsafe::AsPointer<!T>(!!0&)
+    IL_001b:  call       int32 [System.Runtime]System.Runtime.CompilerServices.Unsafe::SizeOf<valuetype System.ValueArray`2<!T,!X>>()
+    IL_0020:  conv.i8
+    IL_0021:  call       int32 [System.Runtime]System.Runtime.CompilerServices.Unsafe::SizeOf<valuetype System.ValueArray`2<!T,!X>>()
+    IL_0026:  conv.i8
+    IL_0027:  call       void [System.Runtime]System.Buffer::MemoryCopy(void*,
+                                                                                void*,
+                                                                                int64,
+                                                                                int64)
+    IL_002c:  ret
+  } // end of method ValueArray`2::CopyTo
+
+  .method public hidebysig instance void
+          CopyTo(valuetype [System.Runtime]System.Span`1<!T> destination) cil managed
+  {
+    .param [1]
+    .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8[]) = ( 01 00 02 00 00 00 00 01 00 00 )
+    // Code size       57 (0x39)
+    .maxstack  3
+    .locals init (int32 V_0)
+    IL_0000:  ldc.i4.0
+    IL_0001:  stloc.0
+    IL_0002:  br.s       IL_0026
+
+    IL_0004:  ldarga.s   destination
+    IL_0006:  ldloc.0
+    IL_0007:  call       instance !0& valuetype [System.Runtime]System.Span`1<!T>::get_Item(int32)
+    IL_000c:  ldarg.0
+    IL_000d:  ldflda     !0 valuetype System.ValueArray`2<!T,!X>::_elem
+    IL_0012:  ldloc.0
+    IL_0013:  call       !!0& [System.Runtime]System.Runtime.CompilerServices.Unsafe::Add<!T>(!!0&,
+                                                                                                      int32)
+    IL_0018:  ldobj      !T
+    IL_001d:  stobj      !T
+    IL_0022:  ldloc.0
+    IL_0023:  ldc.i4.1
+    IL_0024:  add
+    IL_0025:  stloc.0
+    IL_0026:  ldloc.0
+    IL_0027:  ldarga.s   destination
+    IL_0029:  call       instance int32 valuetype [System.Runtime]System.Span`1<!T>::get_Length()
+    IL_002e:  bge.s      IL_0038
+
+    IL_0030:  ldloc.0
+    IL_0031:  ldtoken    !X
+    IL_0036:  blt.s      IL_0004
+
+    IL_0038:  ret
+  } // end of method ValueArray`2::CopyTo
+
+  .method public hidebysig instance void
+          CopyTo(valuetype [System.Runtime]System.Memory`1<!T> destination) cil managed
+  {
+    .param [1]
+    .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8[]) = ( 01 00 02 00 00 00 00 01 00 00 )
+    // Code size       65 (0x41)
+    .maxstack  3
+    .locals init (valuetype [System.Runtime]System.Span`1<!T> V_0,
+             int32 V_1)
+    IL_0000:  ldarga.s   destination
+    IL_0002:  call       instance valuetype [System.Runtime]System.Span`1<!0> valuetype [System.Runtime]System.Memory`1<!T>::get_Span()
+    IL_0007:  stloc.0
+    IL_0008:  ldc.i4.0
+    IL_0009:  stloc.1
+    IL_000a:  br.s       IL_002e
+
+    IL_000c:  ldloca.s   V_0
+    IL_000e:  ldloc.1
+    IL_000f:  call       instance !0& valuetype [System.Runtime]System.Span`1<!T>::get_Item(int32)
+    IL_0014:  ldarg.0
+    IL_0015:  ldflda     !0 valuetype System.ValueArray`2<!T,!X>::_elem
+    IL_001a:  ldloc.1
+    IL_001b:  call       !!0& [System.Runtime]System.Runtime.CompilerServices.Unsafe::Add<!T>(!!0&,
+                                                                                                      int32)
+    IL_0020:  ldobj      !T
+    IL_0025:  stobj      !T
+    IL_002a:  ldloc.1
+    IL_002b:  ldc.i4.1
+    IL_002c:  add
+    IL_002d:  stloc.1
+    IL_002e:  ldloc.1
+    IL_002f:  ldloca.s   V_0
+    IL_0031:  call       instance int32 valuetype [System.Runtime]System.Span`1<!T>::get_Length()
+    IL_0036:  bge.s      IL_0040
+
+    IL_0038:  ldloc.1
+    IL_0039:  ldtoken    !X
+    IL_003e:  blt.s      IL_000c
+
+    IL_0040:  ret
+  } // end of method ValueArray`2::CopyTo
+
+  .method public hidebysig instance valuetype [System.Runtime]System.Span`1<!T>
+          AsSpan() cil managed
+  {
+    .param [0]
+    .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8[]) = ( 01 00 02 00 00 00 00 01 00 00 )
+    // Code size       17 (0x11)
+    .maxstack  8
+    IL_0000:  ldarg.0
+    IL_0001:  ldflda     !0 valuetype System.ValueArray`2<!T,!X>::_elem
+    IL_0006:  ldtoken    !X
+    IL_000b:  call       valuetype [System.Runtime]System.Span`1<!!0> [System.Runtime]System.Runtime.InteropServices.MemoryMarshal::CreateSpan<!T>(!!0&,
+
+                                           int32)
+    IL_0010:  ret
+  } // end of method ValueArray`2::AsSpan
+
+  .method public hidebysig instance void
+          CopyTo(!T[] 'array') cil managed
+  {
+    // Code size       13 (0xd)
+    .maxstack  8
+    IL_0000:  ldarg.0
+    IL_0001:  ldarg.1
+    IL_0002:  call       valuetype [System.Runtime]System.Span`1<!!0> [System.Runtime]System.MemoryExtensions::AsSpan<!T>(!!0[])
+    IL_0007:  call       instance void valuetype System.ValueArray`2<!T,!X>::CopyTo(valuetype [System.Runtime]System.Span`1<!0>)
+    IL_000c:  ret
+  } // end of method ValueArray`2::CopyTo
+
+  .property instance callconv(8) !T Item(int32)
+  {
+    .get instance !T System.ValueArray`2::get_Item(int32)
+    .set instance void System.ValueArray`2::set_Item(int32,
+                                                     !T)
+  } // end of property ValueArray`2::Item
+  .property instance callconv(8) int32 Length()
+  {
+    .get instance int32 System.ValueArray`2::get_Length()
+  } // end of property ValueArray`2::Length
+} // end of class System.ValueArray`2

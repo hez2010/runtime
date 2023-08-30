@@ -114,28 +114,157 @@
 {
 }
 
-.class public sequential ansi sealed beforefieldinit System.ValueArray`2<T, literal int32 Length>
-    extends [System.Runtime]System.ValueType
+.class public sequential ansi sealed beforefieldinit System.ValueArray`2<T,literal int32 X>
+       extends [System.Runtime]System.ValueType
 {
-    .method public hidebysig specialname instance !T& get_Item (int32 index) cil managed 
+  .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableContextAttribute::.ctor(uint8) = ( 01 00 01 00 00 )
+  .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8) = ( 01 00 00 00 00 )
+  .custom instance void [System.Runtime]System.Reflection.DefaultMemberAttribute::.ctor(string) = ( 01 00 04 49 74 65 6D 00 00 )                      // ...Item..
+  .param type T
+    .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8) = ( 01 00 02 00 00 )
+  .param type X
+    .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8) = ( 01 00 02 00 00 )
+  .class sequential ansi sealed nested public beforefieldinit Enumerator<T,literal int32 X>
+         extends [System.Runtime]System.ValueType
+  {
+    .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8) = ( 01 00 00 00 00 )
+    .custom instance void [System.Runtime]System.Runtime.CompilerServices.IsByRefLikeAttribute::.ctor() = ( 01 00 00 00 )
+    .custom instance void [System.Runtime]System.ObsoleteAttribute::.ctor(string,
+                                                                                  bool) = ( 01 00 52 54 79 70 65 73 20 77 69 74 68 20 65 6D   // ..RTypes with em
+                                                                                            62 65 64 64 65 64 20 72 65 66 65 72 65 6E 63 65   // bedded reference
+                                                                                            73 20 61 72 65 20 6E 6F 74 20 73 75 70 70 6F 72   // s are not suppor
+                                                                                            74 65 64 20 69 6E 20 74 68 69 73 20 76 65 72 73   // ted in this vers
+                                                                                            69 6F 6E 20 6F 66 20 79 6F 75 72 20 63 6F 6D 70   // ion of your comp
+                                                                                            69 6C 65 72 2E 01 00 00 )                         // iler....
+    .custom instance void [System.Runtime]System.Runtime.CompilerServices.CompilerFeatureRequiredAttribute::.ctor(string) = ( 01 00 0A 52 65 66 53 74 72 75 63 74 73 00 00 )    // ...RefStructs..
+    .param type T
+      .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8) = ( 01 00 02 00 00 )
+    .param type X
+      .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8) = ( 01 00 02 00 00 )
+    .method public hidebysig specialname rtspecialname
+            instance void  .ctor(valuetype System.ValueArray`2<!T,!X>& 'array') cil managed
     {
-        .maxstack 1
-        .locals init (
-            [0] !T
-        )
+      .param [1]
+      .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8[]) = ( 01 00 03 00 00 00 00 01 00 00 00 )
+      // Code size       15 (0xf)
+      .maxstack  8
+      ldnull
+      throw
+    } // end of method Enumerator::.ctor
 
-        newobj instance void [System.Runtime]System.NotImplementedException::.ctor()
-        throw
-    }
-
-    .method public hidebysig specialname instance int32 get_Length () cil managed 
+    .method public hidebysig instance bool
+            MoveNext() cil managed
     {
-        .maxstack 1
-        .locals init (
-            [0] !T
-        )
+      // Code size       28 (0x1c)
+      .maxstack  3
+      ldnull
+      throw
+    } // end of method Enumerator::MoveNext
 
-        newobj instance void [System.Runtime]System.NotImplementedException::.ctor()
-        throw
-    }
-}
+    .method public hidebysig specialname
+            instance !T  get_Current() cil managed
+    {
+      .custom instance void [System.Runtime]System.Runtime.CompilerServices.IsReadOnlyAttribute::.ctor() = ( 01 00 00 00 )
+      // Code size       18 (0x12)
+      .maxstack  8
+      ldnull
+      throw
+    } // end of method Enumerator::get_Current
+  } // end of class Enumerator
+
+  .field private !T _elem
+  .method public hidebysig specialname instance !T
+          get_Item(int32 index) cil managed
+  {
+    // Code size       36 (0x24)
+    .maxstack  8
+    ldnull
+    throw
+  } // end of method ValueArray`2::get_Item
+
+  .method public hidebysig specialname instance void
+          set_Item(int32 index,
+                   !T 'value') cil managed
+  {
+    // Code size       36 (0x24)
+    .maxstack  8
+    ldnull
+    throw
+  } // end of method ValueArray`2::set_Item
+
+  .method public hidebysig specialname instance int32
+          get_Length() cil managed
+  {
+    .custom instance void [System.Runtime]System.Runtime.CompilerServices.IsReadOnlyAttribute::.ctor() = ( 01 00 00 00 )
+    // Code size       6 (0x6)
+    .maxstack  8
+    ldnull
+    throw
+  } // end of method ValueArray`2::get_Length
+
+  .method public hidebysig instance valuetype System.ValueArray`2/Enumerator<!T,!X>
+          GetEnumerator() cil managed
+  {
+    .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableContextAttribute::.ctor(uint8) = ( 01 00 00 00 00 )
+    .custom instance void [System.Runtime]System.Diagnostics.CodeAnalysis.UnscopedRefAttribute::.ctor() = ( 01 00 00 00 )
+    // Code size       7 (0x7)
+    .maxstack  8
+    ldnull
+    throw
+  } // end of method ValueArray`2::GetEnumerator
+
+  .method public hidebysig instance void
+          CopyTo([in] valuetype System.ValueArray`2<!T,!X>& destination) cil managed
+  {
+    .param [1]
+    .custom instance void [System.Runtime]System.Runtime.CompilerServices.ScopedRefAttribute::.ctor() = ( 01 00 00 00 )
+    .custom instance void [System.Runtime]System.Runtime.CompilerServices.RequiresLocationAttribute::.ctor() = ( 01 00 00 00 )
+    .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8[]) = ( 01 00 03 00 00 00 00 01 00 00 00 )
+    // Code size       45 (0x2d)
+    .maxstack  8
+    ldnull
+    throw
+  } // end of method ValueArray`2::CopyTo
+
+  .method public hidebysig instance void
+          CopyTo(valuetype [System.Runtime]System.Span`1<!T> destination) cil managed
+  {
+    .param [1]
+    .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8[]) = ( 01 00 02 00 00 00 00 01 00 00 )
+    // Code size       57 (0x39)
+    .maxstack  3
+    ldnull
+    throw
+  } // end of method ValueArray`2::CopyTo
+
+  .method public hidebysig instance void
+          CopyTo(valuetype [System.Runtime]System.Memory`1<!T> destination) cil managed
+  {
+    .param [1]
+    .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8[]) = ( 01 00 02 00 00 00 00 01 00 00 )
+    // Code size       65 (0x41)
+    .maxstack  3
+    ldnull
+    throw
+  } // end of method ValueArray`2::CopyTo
+
+  .method public hidebysig instance valuetype [System.Runtime]System.Span`1<!T>
+          AsSpan() cil managed
+  {
+    .param [0]
+    .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8[]) = ( 01 00 02 00 00 00 00 01 00 00 )
+    // Code size       17 (0x11)
+    .maxstack  8
+    ldnull
+    throw
+  } // end of method ValueArray`2::AsSpan
+
+  .method public hidebysig instance void
+          CopyTo(!T[] 'array') cil managed
+  {
+    // Code size       13 (0xd)
+    .maxstack  8
+    ldnull
+    throw
+  } // end of method ValueArray`2::CopyTo
+} // end of class System.ValueArray`2

@@ -237,21 +237,23 @@
     .maxstack  8
     IL_0000:  ldarg.1
     IL_0001:  ldc.i4.0
-    IL_0002:  blt.s      IL_001e
+    IL_0002:  blt.s      IL_001f
 
     IL_0004:  ldarg.1
     IL_0005:  ldtoken    !X
-    IL_000a:  bge.s      IL_001e
+    IL_000a:  bge.s      IL_001f
 
     IL_000c:  ldarg.0
     IL_000d:  ldflda     !0 valuetype System.ValueArray`2<!T,!X>::_elem
     IL_0012:  ldarg.1
     IL_0013:  call       !!0& [System.Runtime]System.Runtime.CompilerServices.Unsafe::Add<!T>(!!0&,
-                                                                                                      int32)
+                                                                                              int32)
     IL_0018:  ldarg.2
     IL_0019:  stobj      !T
-    IL_001e:  newobj     instance void [System.Runtime]System.IndexOutOfRangeException::.ctor()
-    IL_0023:  throw
+    IL_001e:  ret
+
+    IL_001f:  newobj     instance void [System.Runtime]System.IndexOutOfRangeException::.ctor()
+    IL_0024:  throw
   } // end of method ValueArray`2::set_Item
 
   .method public hidebysig specialname instance int32

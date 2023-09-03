@@ -396,7 +396,7 @@ UINT64 ParseValue(TypeHandle th, LPCSTR szValue)
     }
     else if (th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__BOOLEAN))))
     {
-        value = strcmp(szValue, "true") ? 1 : 0;
+        value = strcmp(szValue, "true") == 0 ? 1 : 0;
     }
 
     return value;

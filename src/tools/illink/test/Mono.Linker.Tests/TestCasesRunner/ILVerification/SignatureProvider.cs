@@ -98,4 +98,6 @@ public class SignatureProvider : ISignatureTypeProvider<string, object>
 
 	public string GetFunctionPointerType (MethodSignature<string> signature)
 		=> $"{signature.ReturnType} *({string.Join (",", signature.ParameterTypes)})";
+
+	public string GetConstValueType(string type, object? value) => $"{type} ({value ?? "null"})";
 }

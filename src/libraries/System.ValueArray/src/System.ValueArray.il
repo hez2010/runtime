@@ -1,142 +1,115 @@
-.assembly extern System.Runtime
-{
-    .publickeytoken = (b0 3f 5f 7f 11 d5 0a 3a)
-    .ver 8:0:0:0
-}
+// Licensed to the .NET Foundation under one or more agreements.
+// The .NET Foundation licenses this file to you under the MIT license.
 
-.assembly extern System.Console
-{
-    .publickeytoken = (b0 3f 5f 7f 11 d5 0a 3a)
-    .ver 8:0:0:0
-}
-
-.assembly extern System.Runtime.InteropServices
-{
-    .publickeytoken = (b0 3f 5f 7f 11 d5 0a 3a)
-    .ver 8:0:0:0
-}
+#include "version.h"
 
 .assembly System.ValueArray
 {
-    .ver 8:0:0:0
-    
-    .custom instance void [System.Runtime]System.Runtime.CompilerServices.CompilationRelaxationsAttribute::.ctor(int32) = (
+    .custom instance void [CORE_ASSEMBLY]System.Runtime.CompilerServices.CompilationRelaxationsAttribute::.ctor(int32) = (
         01 00 08 00 00 00 00 00
     )
-    .custom instance void [System.Runtime]System.Runtime.CompilerServices.RuntimeCompatibilityAttribute::.ctor() = (
+    .custom instance void [CORE_ASSEMBLY]System.Runtime.CompilerServices.RuntimeCompatibilityAttribute::.ctor() = (
         01 00 01 00 54 02 16 57 72 61 70 4e 6f 6e 45 78
         63 65 70 74 69 6f 6e 54 68 72 6f 77 73 01
     )
-    .custom instance void [System.Runtime]System.Diagnostics.DebuggableAttribute::.ctor(valuetype [System.Runtime]System.Diagnostics.DebuggableAttribute/DebuggingModes) = (
-        01 00 02 00 00 00 00 00
-    )
-    .custom instance void [System.Runtime]System.Runtime.Versioning.TargetFrameworkAttribute::.ctor(string) = (
-        01 00 18 2e 4e 45 54 43 6f 72 65 41 70 70 2c 56
-        65 72 73 69 6f 6e 3d 76 38 2e 30 01 00 54 0e 14
-        46 72 61 6d 65 77 6f 72 6b 44 69 73 70 6c 61 79
-        4e 61 6d 65 08 2e 4e 45 54 20 38 2e 30
-    )
-    .custom instance void [System.Runtime]System.Reflection.AssemblyMetadataAttribute::.ctor(string, string) = (
+    .custom instance void [CORE_ASSEMBLY]System.Reflection.AssemblyMetadataAttribute::.ctor(string, string) = (
         01 00 0b 53 65 72 76 69 63 65 61 62 6c 65 04 54
         72 75 65 00 00
     )
-    .custom instance void [System.Runtime]System.Reflection.AssemblyMetadataAttribute::.ctor(string, string) = (
+    .custom instance void [CORE_ASSEMBLY]System.Reflection.AssemblyMetadataAttribute::.ctor(string, string) = (
         01 00 0b 50 72 65 66 65 72 49 6e 62 6f 78 04 54
         72 75 65 00 00
     )
-    .custom instance void [System.Runtime]System.Reflection.AssemblyDefaultAliasAttribute::.ctor(string) = (
+    .custom instance void [CORE_ASSEMBLY]System.Reflection.AssemblyDefaultAliasAttribute::.ctor(string) = (
         01 00 11 53 79 73 74 65 6d 2e 56 61 6c 75 65 41
         72 72 61 79 00 00
     )
-	.custom instance void [System.Runtime]System.Resources.NeutralResourcesLanguageAttribute::.ctor(string) = (
+	.custom instance void [CORE_ASSEMBLY]System.Resources.NeutralResourcesLanguageAttribute::.ctor(string) = (
 		01 00 05 65 6e 2d 55 53 00 00
 	)
-    .custom instance void [System.Runtime]System.CLSCompliantAttribute::.ctor(bool) = (
+    .custom instance void [CORE_ASSEMBLY]System.CLSCompliantAttribute::.ctor(bool) = (
         01 00 00 00 00
     )
-    .custom instance void [System.Runtime]System.Reflection.AssemblyMetadataAttribute::.ctor(string, string) = (
+    .custom instance void [CORE_ASSEMBLY]System.Reflection.AssemblyMetadataAttribute::.ctor(string, string) = (
         01 00 0b 49 73 54 72 69 6d 6d 61 62 6c 65 05 46
         61 6c 73 65 00 00
     )
-    .custom instance void [System.Runtime.InteropServices]System.Runtime.InteropServices.DefaultDllImportSearchPathsAttribute::.ctor(valuetype [System.Runtime.InteropServices]System.Runtime.InteropServices.DllImportSearchPath) = (
-        01 00 02 08 00 00 00 00
-    )
-    .custom instance void [System.Runtime]System.Reflection.AssemblyCompanyAttribute::.ctor(string) = (
+    .custom instance void [CORE_ASSEMBLY]System.Reflection.AssemblyCompanyAttribute::.ctor(string) = (
         01 00 15 4d 69 63 72 6f 73 6f 66 74 20 43 6f 72
         70 6f 72 61 74 69 6f 6e 00 00
     )
-    .custom instance void [System.Runtime]System.Reflection.AssemblyCopyrightAttribute::.ctor(string) = (
+    .custom instance void [CORE_ASSEMBLY]System.Reflection.AssemblyCopyrightAttribute::.ctor(string) = (
         01 00 2e c2 a9 20 4d 69 63 72 6f 73 6f 66 74 20
         43 6f 72 70 6f 72 61 74 69 6f 6e 2e 20 41 6c 6c
         20 72 69 67 68 74 73 20 72 65 73 65 72 76 65 64
         2e 00 00
     )
-    .custom instance void [System.Runtime]System.Reflection.AssemblyDescriptionAttribute::.ctor(string) = (
+    .custom instance void [CORE_ASSEMBLY]System.Reflection.AssemblyDescriptionAttribute::.ctor(string) = (
         01 00 11 53 79 73 74 65 6d 2e 56 61 6c 75 65 41
         72 72 61 79 00 00
     )
-    .custom instance void [System.Runtime]System.Reflection.AssemblyFileVersionAttribute::.ctor(string) = (
-        01 00 0e 34 32 2e 34 32 2e 34 32 2e 34 32 34 32
-        34 00 00
-    )
-    .custom instance void [System.Runtime]System.Reflection.AssemblyInformationalVersionAttribute::.ctor(string) = (
-        01 00 09 38 2e 30 2e 30 2d 64 65 76 00 00
-    )
-    .custom instance void [System.Runtime]System.Reflection.AssemblyProductAttribute::.ctor(string) = (
+    .custom instance void [CORE_ASSEMBLY]System.Reflection.AssemblyFileVersionAttribute::.ctor(string) = FILE_VERSION
+    .custom instance void [CORE_ASSEMBLY]System.Reflection.AssemblyInformationalVersionAttribute::.ctor(string) = INFORMATIONAL_VERSION
+    .custom instance void [CORE_ASSEMBLY]System.Reflection.AssemblyProductAttribute::.ctor(string) = (
         01 00 10 4d 69 63 72 6f 73 6f 66 74 c2 ae 20 2e
         4e 45 54 00 00
     )
-    .custom instance void [System.Runtime]System.Reflection.AssemblyTitleAttribute::.ctor(string) = (
+    .custom instance void [CORE_ASSEMBLY]System.Reflection.AssemblyTitleAttribute::.ctor(string) = (
         01 00 11 53 79 73 74 65 6d 2e 56 61 6c 75 65 41
         72 72 61 79 00 00
     )
-    .custom instance void [System.Runtime]System.Reflection.AssemblyMetadataAttribute::.ctor(string, string) = (
+    .custom instance void [CORE_ASSEMBLY]System.Reflection.AssemblyMetadataAttribute::.ctor(string, string) = (
         01 00 0d 52 65 70 6f 73 69 74 6f 72 79 55 72 6c
         21 68 74 74 70 73 3a 2f 2f 67 69 74 68 75 62 2e
         63 6f 6d 2f 64 6f 74 6e 65 74 2f 72 75 6e 74 69
         6d 65 00 00
     )
+    .hash algorithm 0x00008004
+    .ver ASSEMBLY_VERSION
 }
 
-.class private auto ansi '<Module>'
-{
-}
+.module System.ValueArray.dll
+.imagebase 0x00400000
+.file alignment 0x00000200
+.stackreserve 0x00100000
+.subsystem 0x0003
+.corflags 0x00000001
 
 .class public sequential ansi sealed beforefieldinit System.ValueArray`2<T,literal int32 X>
-       extends [System.Runtime]System.ValueType
+       extends [CORE_ASSEMBLY]System.ValueType
 {
-  .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableContextAttribute::.ctor(uint8) = ( 01 00 01 00 00 )
-  .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8) = ( 01 00 00 00 00 )
-  .custom instance void [System.Runtime]System.Reflection.DefaultMemberAttribute::.ctor(string) = ( 01 00 04 49 74 65 6D 00 00 )                      // ...Item..
+  .custom instance void [CORE_ASSEMBLY]System.Runtime.CompilerServices.NullableContextAttribute::.ctor(uint8) = ( 01 00 01 00 00 )
+  .custom instance void [CORE_ASSEMBLY]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8) = ( 01 00 00 00 00 )
+  .custom instance void [CORE_ASSEMBLY]System.Reflection.DefaultMemberAttribute::.ctor(string) = ( 01 00 04 49 74 65 6D 00 00 )                      // ...Item..
   .param type T
-    .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8) = ( 01 00 02 00 00 )
+    .custom instance void [CORE_ASSEMBLY]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8) = ( 01 00 02 00 00 )
   .param type X
-    .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8) = ( 01 00 02 00 00 )
+    .custom instance void [CORE_ASSEMBLY]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8) = ( 01 00 02 00 00 )
   .class sequential ansi sealed nested public beforefieldinit Enumerator<T,literal int32 X>
-         extends [System.Runtime]System.ValueType
+         extends [CORE_ASSEMBLY]System.ValueType
   {
-    .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8) = ( 01 00 00 00 00 )
-    .custom instance void [System.Runtime]System.Runtime.CompilerServices.IsByRefLikeAttribute::.ctor() = ( 01 00 00 00 )
-    .custom instance void [System.Runtime]System.ObsoleteAttribute::.ctor(string,
+    .custom instance void [CORE_ASSEMBLY]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8) = ( 01 00 00 00 00 )
+    .custom instance void [CORE_ASSEMBLY]System.Runtime.CompilerServices.IsByRefLikeAttribute::.ctor() = ( 01 00 00 00 )
+    .custom instance void [CORE_ASSEMBLY]System.ObsoleteAttribute::.ctor(string,
                                                                                   bool) = ( 01 00 52 54 79 70 65 73 20 77 69 74 68 20 65 6D   // ..RTypes with em
                                                                                             62 65 64 64 65 64 20 72 65 66 65 72 65 6E 63 65   // bedded reference
                                                                                             73 20 61 72 65 20 6E 6F 74 20 73 75 70 70 6F 72   // s are not suppor
                                                                                             74 65 64 20 69 6E 20 74 68 69 73 20 76 65 72 73   // ted in this vers
                                                                                             69 6F 6E 20 6F 66 20 79 6F 75 72 20 63 6F 6D 70   // ion of your comp
                                                                                             69 6C 65 72 2E 01 00 00 )                         // iler....
-    .custom instance void [System.Runtime]System.Runtime.CompilerServices.CompilerFeatureRequiredAttribute::.ctor(string) = ( 01 00 0A 52 65 66 53 74 72 75 63 74 73 00 00 )    // ...RefStructs..
+    .custom instance void [CORE_ASSEMBLY]System.Runtime.CompilerServices.CompilerFeatureRequiredAttribute::.ctor(string) = ( 01 00 0A 52 65 66 53 74 72 75 63 74 73 00 00 )    // ...RefStructs..
     .param type T
-      .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8) = ( 01 00 02 00 00 )
+      .custom instance void [CORE_ASSEMBLY]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8) = ( 01 00 02 00 00 )
     .param type X
-      .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8) = ( 01 00 02 00 00 )
+      .custom instance void [CORE_ASSEMBLY]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8) = ( 01 00 02 00 00 )
     .field private initonly valuetype System.ValueArray`2<!T,!X>& _array
-    .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8[]) = ( 01 00 03 00 00 00 00 01 00 00 00 )
+    .custom instance void [CORE_ASSEMBLY]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8[]) = ( 01 00 03 00 00 00 00 01 00 00 00 )
     .field private int32 _index
     .method public hidebysig specialname rtspecialname
             instance void  .ctor(valuetype System.ValueArray`2<!T,!X>& 'array') cil managed
     {
       .param [1]
-      .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8[]) = ( 01 00 03 00 00 00 00 01 00 00 00 )
+      .custom instance void [CORE_ASSEMBLY]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8[]) = ( 01 00 03 00 00 00 00 01 00 00 00 )
       // Code size       15 (0xf)
       .maxstack  8
       IL_0000:  ldarg.0
@@ -175,7 +148,7 @@
     .method public hidebysig specialname
             instance !T  get_Current() cil managed
     {
-      .custom instance void [System.Runtime]System.Runtime.CompilerServices.IsReadOnlyAttribute::.ctor() = ( 01 00 00 00 )
+      .custom instance void [CORE_ASSEMBLY]System.Runtime.CompilerServices.IsReadOnlyAttribute::.ctor() = ( 01 00 00 00 )
       // Code size       18 (0x12)
       .maxstack  8
       IL_0000:  ldarg.0
@@ -208,12 +181,12 @@
     IL_000c:  ldarg.0
     IL_000d:  ldflda     !0 valuetype System.ValueArray`2<!T,!X>::_elem
     IL_0012:  ldarg.1
-    IL_0013:  call       !!0& [System.Runtime]System.Runtime.CompilerServices.Unsafe::Add<!T>(!!0&,
+    IL_0013:  call       !!0& [CORE_ASSEMBLY]System.Runtime.CompilerServices.Unsafe::Add<!T>(!!0&,
                                                                                                       int32)
     IL_0018:  ldobj      !T
     IL_001d:  ret
 
-    IL_001e:  newobj     instance void [System.Runtime]System.IndexOutOfRangeException::.ctor()
+    IL_001e:  newobj     instance void [CORE_ASSEMBLY]System.IndexOutOfRangeException::.ctor()
     IL_0023:  throw
   } // end of method ValueArray`2::get_Item
 
@@ -234,20 +207,20 @@
     IL_000c:  ldarg.0
     IL_000d:  ldflda     !0 valuetype System.ValueArray`2<!T,!X>::_elem
     IL_0012:  ldarg.1
-    IL_0013:  call       !!0& [System.Runtime]System.Runtime.CompilerServices.Unsafe::Add<!T>(!!0&,
+    IL_0013:  call       !!0& [CORE_ASSEMBLY]System.Runtime.CompilerServices.Unsafe::Add<!T>(!!0&,
                                                                                               int32)
     IL_0018:  ldarg.2
     IL_0019:  stobj      !T
     IL_001e:  ret
 
-    IL_001f:  newobj     instance void [System.Runtime]System.IndexOutOfRangeException::.ctor()
+    IL_001f:  newobj     instance void [CORE_ASSEMBLY]System.IndexOutOfRangeException::.ctor()
     IL_0024:  throw
   } // end of method ValueArray`2::set_Item
 
   .method public hidebysig specialname instance int32
           get_Length() cil managed
   {
-    .custom instance void [System.Runtime]System.Runtime.CompilerServices.IsReadOnlyAttribute::.ctor() = ( 01 00 00 00 )
+    .custom instance void [CORE_ASSEMBLY]System.Runtime.CompilerServices.IsReadOnlyAttribute::.ctor() = ( 01 00 00 00 )
     // Code size       6 (0x6)
     .maxstack  8
     IL_0000:  ldtoken    !X
@@ -257,8 +230,8 @@
   .method public hidebysig instance valuetype System.ValueArray`2/Enumerator<!T,!X>
           GetEnumerator() cil managed
   {
-    .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableContextAttribute::.ctor(uint8) = ( 01 00 00 00 00 )
-    .custom instance void [System.Runtime]System.Diagnostics.CodeAnalysis.UnscopedRefAttribute::.ctor() = ( 01 00 00 00 )
+    .custom instance void [CORE_ASSEMBLY]System.Runtime.CompilerServices.NullableContextAttribute::.ctor(uint8) = ( 01 00 00 00 00 )
+    .custom instance void [CORE_ASSEMBLY]System.Diagnostics.CodeAnalysis.UnscopedRefAttribute::.ctor() = ( 01 00 00 00 )
     // Code size       7 (0x7)
     .maxstack  8
     IL_0000:  ldarg.0
@@ -270,23 +243,23 @@
           CopyTo([in] valuetype System.ValueArray`2<!T,!X>& destination) cil managed
   {
     .param [1]
-    .custom instance void [System.Runtime]System.Runtime.CompilerServices.ScopedRefAttribute::.ctor() = ( 01 00 00 00 )
-    .custom instance void [System.Runtime]System.Runtime.CompilerServices.RequiresLocationAttribute::.ctor() = ( 01 00 00 00 )
-    .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8[]) = ( 01 00 03 00 00 00 00 01 00 00 00 )
+    .custom instance void [CORE_ASSEMBLY]System.Runtime.CompilerServices.ScopedRefAttribute::.ctor() = ( 01 00 00 00 )
+    .custom instance void [CORE_ASSEMBLY]System.Runtime.CompilerServices.RequiresLocationAttribute::.ctor() = ( 01 00 00 00 )
+    .custom instance void [CORE_ASSEMBLY]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8[]) = ( 01 00 03 00 00 00 00 01 00 00 00 )
     // Code size       45 (0x2d)
     .maxstack  8
     IL_0000:  ldarg.0
     IL_0001:  ldflda     !0 valuetype System.ValueArray`2<!T,!X>::_elem
-    IL_0006:  call       void* [System.Runtime]System.Runtime.CompilerServices.Unsafe::AsPointer<!T>(!!0&)
+    IL_0006:  call       void* [CORE_ASSEMBLY]System.Runtime.CompilerServices.Unsafe::AsPointer<!T>(!!0&)
     IL_000b:  ldarg.1
     IL_000c:  ldflda     !0 valuetype System.ValueArray`2<!T,!X>::_elem
-    IL_0011:  call       !!0& [System.Runtime]System.Runtime.CompilerServices.Unsafe::AsRef<!T>(!!0&)
-    IL_0016:  call       void* [System.Runtime]System.Runtime.CompilerServices.Unsafe::AsPointer<!T>(!!0&)
-    IL_001b:  call       int32 [System.Runtime]System.Runtime.CompilerServices.Unsafe::SizeOf<valuetype System.ValueArray`2<!T,!X>>()
+    IL_0011:  call       !!0& [CORE_ASSEMBLY]System.Runtime.CompilerServices.Unsafe::AsRef<!T>(!!0&)
+    IL_0016:  call       void* [CORE_ASSEMBLY]System.Runtime.CompilerServices.Unsafe::AsPointer<!T>(!!0&)
+    IL_001b:  call       int32 [CORE_ASSEMBLY]System.Runtime.CompilerServices.Unsafe::SizeOf<valuetype System.ValueArray`2<!T,!X>>()
     IL_0020:  conv.i8
-    IL_0021:  call       int32 [System.Runtime]System.Runtime.CompilerServices.Unsafe::SizeOf<valuetype System.ValueArray`2<!T,!X>>()
+    IL_0021:  call       int32 [CORE_ASSEMBLY]System.Runtime.CompilerServices.Unsafe::SizeOf<valuetype System.ValueArray`2<!T,!X>>()
     IL_0026:  conv.i8
-    IL_0027:  call       void [System.Runtime]System.Buffer::MemoryCopy(void*,
+    IL_0027:  call       void [CORE_ASSEMBLY]System.Buffer::MemoryCopy(void*,
                                                                                 void*,
                                                                                 int64,
                                                                                 int64)
@@ -294,10 +267,10 @@
   } // end of method ValueArray`2::CopyTo
 
   .method public hidebysig instance void
-          CopyTo(valuetype [System.Runtime]System.Span`1<!T> destination) cil managed
+          CopyTo(valuetype [CORE_ASSEMBLY]System.Span`1<!T> destination) cil managed
   {
     .param [1]
-    .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8[]) = ( 01 00 02 00 00 00 00 01 00 00 )
+    .custom instance void [CORE_ASSEMBLY]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8[]) = ( 01 00 02 00 00 00 00 01 00 00 )
     // Code size       57 (0x39)
     .maxstack  3
     .locals init (int32 V_0)
@@ -307,11 +280,11 @@
 
     IL_0004:  ldarga.s   destination
     IL_0006:  ldloc.0
-    IL_0007:  call       instance !0& valuetype [System.Runtime]System.Span`1<!T>::get_Item(int32)
+    IL_0007:  call       instance !0& valuetype [CORE_ASSEMBLY]System.Span`1<!T>::get_Item(int32)
     IL_000c:  ldarg.0
     IL_000d:  ldflda     !0 valuetype System.ValueArray`2<!T,!X>::_elem
     IL_0012:  ldloc.0
-    IL_0013:  call       !!0& [System.Runtime]System.Runtime.CompilerServices.Unsafe::Add<!T>(!!0&,
+    IL_0013:  call       !!0& [CORE_ASSEMBLY]System.Runtime.CompilerServices.Unsafe::Add<!T>(!!0&,
                                                                                                       int32)
     IL_0018:  ldobj      !T
     IL_001d:  stobj      !T
@@ -321,7 +294,7 @@
     IL_0025:  stloc.0
     IL_0026:  ldloc.0
     IL_0027:  ldarga.s   destination
-    IL_0029:  call       instance int32 valuetype [System.Runtime]System.Span`1<!T>::get_Length()
+    IL_0029:  call       instance int32 valuetype [CORE_ASSEMBLY]System.Span`1<!T>::get_Length()
     IL_002e:  bge.s      IL_0038
 
     IL_0030:  ldloc.0
@@ -332,16 +305,16 @@
   } // end of method ValueArray`2::CopyTo
 
   .method public hidebysig instance void
-          CopyTo(valuetype [System.Runtime]System.Memory`1<!T> destination) cil managed
+          CopyTo(valuetype [CORE_ASSEMBLY]System.Memory`1<!T> destination) cil managed
   {
     .param [1]
-    .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8[]) = ( 01 00 02 00 00 00 00 01 00 00 )
+    .custom instance void [CORE_ASSEMBLY]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8[]) = ( 01 00 02 00 00 00 00 01 00 00 )
     // Code size       65 (0x41)
     .maxstack  3
-    .locals init (valuetype [System.Runtime]System.Span`1<!T> V_0,
+    .locals init (valuetype [CORE_ASSEMBLY]System.Span`1<!T> V_0,
              int32 V_1)
     IL_0000:  ldarga.s   destination
-    IL_0002:  call       instance valuetype [System.Runtime]System.Span`1<!0> valuetype [System.Runtime]System.Memory`1<!T>::get_Span()
+    IL_0002:  call       instance valuetype [CORE_ASSEMBLY]System.Span`1<!0> valuetype [CORE_ASSEMBLY]System.Memory`1<!T>::get_Span()
     IL_0007:  stloc.0
     IL_0008:  ldc.i4.0
     IL_0009:  stloc.1
@@ -349,11 +322,11 @@
 
     IL_000c:  ldloca.s   V_0
     IL_000e:  ldloc.1
-    IL_000f:  call       instance !0& valuetype [System.Runtime]System.Span`1<!T>::get_Item(int32)
+    IL_000f:  call       instance !0& valuetype [CORE_ASSEMBLY]System.Span`1<!T>::get_Item(int32)
     IL_0014:  ldarg.0
     IL_0015:  ldflda     !0 valuetype System.ValueArray`2<!T,!X>::_elem
     IL_001a:  ldloc.1
-    IL_001b:  call       !!0& [System.Runtime]System.Runtime.CompilerServices.Unsafe::Add<!T>(!!0&,
+    IL_001b:  call       !!0& [CORE_ASSEMBLY]System.Runtime.CompilerServices.Unsafe::Add<!T>(!!0&,
                                                                                                       int32)
     IL_0020:  ldobj      !T
     IL_0025:  stobj      !T
@@ -363,7 +336,7 @@
     IL_002d:  stloc.1
     IL_002e:  ldloc.1
     IL_002f:  ldloca.s   V_0
-    IL_0031:  call       instance int32 valuetype [System.Runtime]System.Span`1<!T>::get_Length()
+    IL_0031:  call       instance int32 valuetype [CORE_ASSEMBLY]System.Span`1<!T>::get_Length()
     IL_0036:  bge.s      IL_0040
 
     IL_0038:  ldloc.1
@@ -373,17 +346,17 @@
     IL_0040:  ret
   } // end of method ValueArray`2::CopyTo
 
-  .method public hidebysig instance valuetype [System.Runtime]System.Span`1<!T>
+  .method public hidebysig instance valuetype [CORE_ASSEMBLY]System.Span`1<!T>
           AsSpan() cil managed
   {
     .param [0]
-    .custom instance void [System.Runtime]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8[]) = ( 01 00 02 00 00 00 00 01 00 00 )
+    .custom instance void [CORE_ASSEMBLY]System.Runtime.CompilerServices.NullableAttribute::.ctor(uint8[]) = ( 01 00 02 00 00 00 00 01 00 00 )
     // Code size       17 (0x11)
     .maxstack  8
     IL_0000:  ldarg.0
     IL_0001:  ldflda     !0 valuetype System.ValueArray`2<!T,!X>::_elem
     IL_0006:  ldtoken    !X
-    IL_000b:  call       valuetype [System.Runtime]System.Span`1<!!0> [System.Runtime]System.Runtime.InteropServices.MemoryMarshal::CreateSpan<!T>(!!0&,
+    IL_000b:  call       valuetype [CORE_ASSEMBLY]System.Span`1<!!0> [CORE_ASSEMBLY]System.Runtime.InteropServices.MemoryMarshal::CreateSpan<!T>(!!0&,
 
                                            int32)
     IL_0010:  ret
@@ -396,8 +369,8 @@
     .maxstack  8
     IL_0000:  ldarg.0
     IL_0001:  ldarg.1
-    IL_0002:  call       valuetype [System.Runtime]System.Span`1<!!0> [System.Runtime]System.MemoryExtensions::AsSpan<!T>(!!0[])
-    IL_0007:  call       instance void valuetype System.ValueArray`2<!T,!X>::CopyTo(valuetype [System.Runtime]System.Span`1<!0>)
+    IL_0002:  call       valuetype [CORE_ASSEMBLY]System.Span`1<!!0> [CORE_ASSEMBLY]System.MemoryExtensions::AsSpan<!T>(!!0[])
+    IL_0007:  call       instance void valuetype System.ValueArray`2<!T,!X>::CopyTo(valuetype [CORE_ASSEMBLY]System.Span`1<!0>)
     IL_000c:  ret
   } // end of method ValueArray`2::CopyTo
 

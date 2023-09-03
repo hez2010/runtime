@@ -341,11 +341,21 @@ namespace ILCompiler
 
                     foreach (var inputFile in inFilePaths)
                     {
+                        // a termporary workaround for not crossgen ValueArray before the managed type system has proper implementation of const generics
+                        if (Path.GetFileName(inputFile.Value) == "System.ValueArray.dll")
+                        {
+                            File.Copy(inputFile.Value, outFile, true);
+                            if (Get(_command.Pdb) && File.Exists(Path.ChangeExtension(inputFile.Value, ".pdb")))
+                            {
+                                File.Copy(Path.ChangeExtension(inputFile.Value, ".pdb"), Path.Combine(Get(_command.PdbPath), Path.ChangeExtension(Path.GetFileName(outFile), ".ni.pdb")), true);
+                            }
+                            return;
+                        }
+
                         EcmaModule module = typeSystemContext.GetModuleFromPath(inputFile.Value);
                         inputModules.Add(module);
                         rootingModules.Add(module);
                         versionBubbleModulesHash.Add(module);
-
 
                         if (!_command.CompositeOrInputBubble)
                         {
@@ -355,6 +365,12 @@ namespace ILCompiler
 
                     foreach (var unrootedInputFile in unrootedInputFilePaths)
                     {
+                        // a termporary workaround for not crossgen ValueArray before the managed type system has proper implementation of const generics
+                        if (Path.GetFileName(unrootedInputFile.Value) == "System.ValueArray.dll")
+                        {
+                            continue;
+                        }
+
                         EcmaModule module = typeSystemContext.GetModuleFromPath(unrootedInputFile.Value);
                         inputModules.Add(module);
                         versionBubbleModulesHash.Add(module);

@@ -51,4 +51,5 @@ internal sealed class SignatureTypeProvider : ISignatureTypeProvider<ElementType
     ElementType ISignatureTypeProvider<ElementType, object>.GetTypeFromSpecification(MetadataReader reader, object genericContext, TypeSpecificationHandle handle, byte rawTypeKind) => ElementType.Object;
     ElementType ISimpleTypeProvider<ElementType>.GetTypeFromDefinition(MetadataReader reader, TypeDefinitionHandle handle, byte rawTypeKind) => ElementType.Object;
     ElementType ISimpleTypeProvider<ElementType>.GetTypeFromReference(MetadataReader reader, TypeReferenceHandle handle, byte rawTypeKind) => ElementType.Object;
+    ElementType ISignatureTypeProvider<ElementType, object>.GetConstValueType(ElementType type, object value) => ElementType.Object;
 }

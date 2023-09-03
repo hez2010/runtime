@@ -376,11 +376,8 @@ UINT64 ParseValue(TypeHandle th, LPCSTR szValue)
         || th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__CHAR)))
         || th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__INT16)))
         || th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__INT32)))
-        || th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__INT64))))
-    {
-        value = (UINT64)strtoll(szValue, NULL, 10);
-    }
-    else if (th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__BYTE)))
+        || th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__INT64)))
+        || th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__BYTE)))
         || th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__UINT16)))
         || th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__UINT32)))
         || th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__UINT64))))
@@ -389,7 +386,7 @@ UINT64 ParseValue(TypeHandle th, LPCSTR szValue)
     }
     else if (th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__SINGLE))))
     {
-        float floatValue = strtof(szValue, NULL);
+        float floatValue = (float)strtod(szValue, NULL);
         memcpy(&value, &floatValue, sizeof(float));
     }
     else if (th.IsEquivalentTo(TypeHandle(CoreLibBinder::GetClass(BinderClassID::CLASS__DOUBLE))))

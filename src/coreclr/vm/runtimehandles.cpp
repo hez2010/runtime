@@ -900,7 +900,7 @@ FCIMPL1(Object*, RuntimeTypeHandle::GetConstValue, ReflectClassBaseObject* pType
 
     HELPER_METHOD_FRAME_BEGIN_RET_PROTECT(gc);
     {
-        gc.retVal = AllocateObject(type.AsMethodTable(), false);
+        gc.retVal = AllocateObject(type.AsMethodTable());
         CopyValueClass(gc.retVal->GetData(), &value, type.AsMethodTable());
     }
     HELPER_METHOD_FRAME_END();

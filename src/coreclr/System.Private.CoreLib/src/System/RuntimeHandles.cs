@@ -157,8 +157,8 @@ namespace System
             return corElemType == CorElementType.ELEMENT_TYPE_ARRAY || corElemType == CorElementType.ELEMENT_TYPE_SZARRAY // IsArray
                    || (corElemType == CorElementType.ELEMENT_TYPE_PTR)                                          // IsPointer
                    || (corElemType == CorElementType.ELEMENT_TYPE_BYREF)                                        // IsByRef
-                   || IsConstValueParameter(type)                                                      　       // IsConstGenericVariable
-                   || IsConstValue(type);                                         　　　　　                     // IsConstValue
+                   || IsConstValueParameter(type)                                                               // IsConstGenericVariable
+                   || IsConstValue(type);                                                                       // IsConstValue
         }
 
         // ** WARNING **

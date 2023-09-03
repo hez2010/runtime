@@ -55,8 +55,8 @@
         01 00 00 00 00
     )
     .custom instance void [System.Runtime]System.Reflection.AssemblyMetadataAttribute::.ctor(string, string) = (
-        01 00 0b 49 73 54 72 69 6d 6d 61 62 6c 65 04 54
-        72 75 65 00 00
+        01 00 0b 49 73 54 72 69 6d 6d 61 62 6c 65 05 46
+        61 6c 73 65 00 00
     )
     .custom instance void [System.Runtime.InteropServices]System.Runtime.InteropServices.DefaultDllImportSearchPathsAttribute::.ctor(valuetype [System.Runtime.InteropServices]System.Runtime.InteropServices.DllImportSearchPath) = (
         01 00 02 08 00 00 00 00

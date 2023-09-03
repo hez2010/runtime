@@ -3,6 +3,7 @@
     <TargetFramework>$(NetCoreAppCurrent)</TargetFramework>
     <ILAsmToolPath>$(MSBuildThisFileDirectory)\..\..\..\..\artifacts\bin\coreclr\$(CoreClrOS).$(CoreClrArch).$(Configuration)</ILAsmToolPath>
     <IsTrimmable>false</IsTrimmable>
+    <ILLinkTrimAssembly>false</ILLinkTrimAssembly>
   </PropertyGroup>
 
   <ItemGroup>

@@ -6,6 +6,7 @@
     <IsPackable>true</IsPackable>
     <DisablePackageBaselineValidation>true</DisablePackageBaselineValidation>
     <PackageDescription>Provides high-performance, zero-allocating and fix-sized array types.</PackageDescription>
+    <ILLinkTrimAssembly>false</ILLinkTrimAssembly>
   </PropertyGroup>
 
   <ItemGroup>

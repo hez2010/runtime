@@ -72,8 +72,8 @@
         2e 00 00
     )
     .custom instance void [System.Runtime]System.Reflection.AssemblyDescriptionAttribute::.ctor(string) = (
-        01 00 10 53 79 73 74 65 6d 2e 54 68 72 65 61 64
-        69 6e 67 00 00
+        01 00 11 53 79 73 74 65 6d 2e 56 61 6c 75 65 41
+        72 72 61 79 00 00
     )
     .custom instance void [System.Runtime]System.Reflection.AssemblyFileVersionAttribute::.ctor(string) = (
         01 00 0e 34 32 2e 34 32 2e 34 32 2e 34 32 34 32
@@ -96,18 +96,6 @@
         63 6f 6d 2f 64 6f 74 6e 65 74 2f 72 75 6e 74 69
         6d 65 00 00
     )
-	.publickey = (
-		00 24 00 00 04 80 00 00 94 00 00 00 06 02 00 00
-		00 24 00 00 52 53 41 31 00 04 00 00 01 00 01 00
-		07 d1 fa 57 c4 ae d9 f0 a3 2e 84 aa 0f ae fd 0d
-		e9 e8 fd 6a ec 8f 87 fb 03 76 6c 83 4c 99 92 1e
-		b2 3b e7 9a d9 d5 dc c1 dd 9a d2 36 13 21 02 90
-		0b 72 3c f9 80 95 7f c4 e1 77 10 8f c6 07 77 4f
-		29 e8 32 0e 92 ea 05 ec e4 e8 21 c0 a5 ef e8 f1
-		64 5c 4c 0c 93 c1 ab 99 28 5d 62 2c aa 65 2c 1d
-		fa d6 3d 74 5d 6f 2d e5 f1 7e 5e af 0f c4 96 3d
-		26 1c 8a 12 43 65 18 20 6d c0 93 34 4d 5a d2 93
-	)
 }
 
 .class private auto ansi '<Module>'

@@ -1,0 +1,27 @@
+﻿1 VERSIONINFO
+    FILEVERSION 42,42,42,42424
+    PRODUCTVERSION 8,0,0,0
+    FILEOS 0x4
+    FILETYPE 0x2
+{
+    BLOCK "StringFileInfo"
+    {
+        BLOCK "000004b0"
+        {
+            VALUE "CompanyName", "Microsoft Corporation"
+            VALUE "Comments", "Provides high-performance, zero-allocating and fix-sized array types."
+            VALUE "FileVersion", "42.42.42.42424"
+            VALUE "FileDescription", "System.ValueArray"
+            VALUE "InternalName", "System.ValueArray.dll"
+            VALUE "LegalCopyright", "© Microsoft Corporation. All rights reserved."
+            VALUE "OriginalFilename", "System.ValueArray.dll"
+            VALUE "ProductName", "Microsoft® .NET"
+            VALUE "ProductVersion", "8.0.0-dev"
+            VALUE "Assembly Version", "8.0.0.0"
+        }
+    }
+    BLOCK "VarFileInfo"
+    {
+        VALUE "Translation", 0x0000 0x04B0
+    }
+}

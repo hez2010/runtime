@@ -1,0 +1,22 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!-- https://learn.microsoft.com/en-us/dotnet/fundamentals/package-validation/diagnostic-ids -->
+<Suppressions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:System.ValueArray`2.#ctor</Target>
+    <Left>ref/net8.0/System.ValueArray.dll</Left>
+    <Right>lib/net8.0/System.ValueArray.dll</Right>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:System.ValueArray`2.get_Length</Target>
+    <Left>ref/net8.0/System.ValueArray.dll</Left>
+    <Right>lib/net8.0/System.ValueArray.dll</Right>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0014</DiagnosticId>
+    <Target>M:System.ValueArray`2.GetEnumerator:[T:System.Diagnostics.CodeAnalysis.UnscopedRefAttribute]</Target>
+    <Left>ref/net8.0/System.ValueArray.dll</Left>
+    <Right>lib/net8.0/System.ValueArray.dll</Right>
+  </Suppression>
+</Suppressions>

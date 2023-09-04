@@ -13,12 +13,11 @@
   <ItemGroup>
     <Compile Include="System.ValueArray.il" />
     <None Include="System.ValueArray.il" />
+    <None Include="System.ValueArray.ref.rc" />
+    <None Include="System.ValueArray.ref.res" />
   </ItemGroup>
 
-  <Target Name="GenerateVersionFile"
-          DependsOnTargets="GetAssemblyVersion;ResolveReferences"
-          Inputs="$(MSBuildAllProjects)"
-          Outputs="'$(VersionFilePath)">
+  <Target Name="GenerateVersionFile" DependsOnTargets="GetAssemblyVersion;ResolveReferences" Inputs="$(MSBuildAllProjects)" Outputs="'$(VersionFilePath)">
    <PropertyGroup>
       <IncludePath>$([MSBuild]::NormalizeDirectory('$(IntermediateOutputPath)', 'version'))</IncludePath>
       <IncludePathTrimmed>$(IncludePath.TrimEnd('\'))</IncludePathTrimmed>
@@ -50,11 +49,7 @@ $(ExtraMacros)
       </_VersionFileContents>
     </PropertyGroup>
 
-    <WriteLinesToFile
-      File="$(VersionFilePath)"
-      Lines="$(_VersionFileContents)"
-      Overwrite="true"
-      WriteOnlyWhenDifferent="true" />
+    <WriteLinesToFile File="$(VersionFilePath)" Lines="$(_VersionFileContents)" Overwrite="true" WriteOnlyWhenDifferent="true" />
 
     <ItemGroup>
       <FileWrites Include="$(VersionFilePath)" />
@@ -64,10 +59,19 @@ $(ExtraMacros)
   <!-- Decompile the ILResourceReference to get native resources. -->
   <Target Name="SetILResourceReference"
           BeforeTargets="DisassembleIlasmResourceFile"
-          Condition="'@(ResolvedMatchingContract)' != ''">
-    <ItemGroup>
-      <ILResourceReference Include="@(ResolvedMatchingContract)" />
-    </ItemGroup>
+          Condition="'$(OS)' == 'Windows_NT'">
+
+    <PropertyGroup>
+      <!-- Try to use cvtres.exe from the framework and fallback to the one that is on the PATH in case we can't find it -->
+      <_CvtResCommand>$(SystemRoot)\Microsoft.NET\Framework\v4.0.30319\cvtres.exe</_CvtResCommand>
+      <_CvtResCommand Condition="!Exists('$(_CvtResCommand)')">cvtres.exe</_CvtResCommand>
+      <_CvtResCommand>$(_CvtResCommand) /MACHINE:x86</_CvtResCommand>
+      <_CvtResCommand>$(_CvtResCommand) /OUT:"$(IntermediateOutputPath)$(MSBuildProjectName).ref.res.obj"</_CvtResCommand>
+      <_CvtResCommand>$(_CvtResCommand) "$(IntermediateOutputPath)$(MSBuildProjectName).ref.res"</_CvtResCommand>
+      <IlasmResourceFile>$(IntermediateOutputPath)$(MSBuildProjectName).ref.res.obj</IlasmResourceFile>
+    </PropertyGroup>
+    <Copy SourceFiles="System.ValueArray.ref.res" DestinationFolder="$(IntermediateOutputPath)" />
+    <Exec Command="$(_CvtResCommand)" />
   </Target>
 
 </Project>

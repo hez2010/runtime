@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.IL">
+﻿<Project Sdk="Microsoft.NET.Sdk.IL">
   <PropertyGroup>
     <TargetFramework>$(NetCoreAppCurrent)</TargetFramework>
     <ILAsmToolPath>$(MSBuildThisFileDirectory)\..\..\..\..\artifacts\bin\coreclr\$(CoreClrOS).$(CoreClrArch).$(Configuration)</ILAsmToolPath>
@@ -11,17 +11,16 @@
     <DebugOptimization Condition="'$(Configuration)' == 'Release'">OPT</DebugOptimization>
     <CoreCompileDependsOn>$(CoreCompileDependsOn);GenerateVersionFile</CoreCompileDependsOn>
     <IlasmFlags>$(IlasmFlags) -DEBUG=$(DebugOptimization)</IlasmFlags>
+    <ContractProject>$(LibrariesProjectRoot)$(MSBuildProjectName)\ref\$(MSBuildProjectName).ilproj</ContractProject>
   </PropertyGroup>
 
   <ItemGroup>
     <Compile Include="System.ValueArray.il" />
     <None Include="System.ValueArray.il" />
+    <None Include="..\ref\System.ValueArray.ref.rc" />
   </ItemGroup>
 
-  <Target Name="GenerateVersionFile"
-          DependsOnTargets="GetAssemblyVersion;ResolveReferences"
-          Inputs="$(MSBuildAllProjects)"
-          Outputs="'$(VersionFilePath)">
+  <Target Name="GenerateVersionFile" DependsOnTargets="GetAssemblyVersion;ResolveReferences" Inputs="$(MSBuildAllProjects)" Outputs="'$(VersionFilePath)">
    <PropertyGroup>
       <IncludePath>$([MSBuild]::NormalizeDirectory('$(IntermediateOutputPath)', 'version'))</IncludePath>
       <IncludePathTrimmed>$(IncludePath.TrimEnd('\'))</IncludePathTrimmed>
@@ -53,11 +52,7 @@ $(ExtraMacros)
       </_VersionFileContents>
     </PropertyGroup>
 
-    <WriteLinesToFile
-      File="$(VersionFilePath)"
-      Lines="$(_VersionFileContents)"
-      Overwrite="true"
-      WriteOnlyWhenDifferent="true" />
+    <WriteLinesToFile File="$(VersionFilePath)" Lines="$(_VersionFileContents)" Overwrite="true" WriteOnlyWhenDifferent="true" />
 
     <ItemGroup>
       <FileWrites Include="$(VersionFilePath)" />

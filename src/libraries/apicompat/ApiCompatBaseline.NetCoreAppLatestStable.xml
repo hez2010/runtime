@@ -3,14 +3,8 @@
 <Suppressions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
   <Suppression>
     <DiagnosticId>CP0006</DiagnosticId>
-    <Target>M:System.Reflection.Metadata.Ecma335.SignatureTypeEncoder.ConstValueType(System.Reflection.Metadata.Ecma335.SignatureTypeEncoder@,System.Reflection.Metadata.Ecma335.ScalarEncoder@)</Target>
-    <Left>net7.0/System.Reflection.Metadata.dll</Left>
-    <Right>net8.0/System.Reflection.Metadata.dll</Right>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0006</DiagnosticId>
     <Target>M:System.Reflection.Metadata.ISignatureTypeProvider`2.GetConstValueType(`0,System.Object)</Target>
-    <Left>net7.0/System.Reflection.Metadata.dll</Left>
-    <Right>net8.0/System.Reflection.Metadata.dll</Right>
+    <Left>net8.0/System.Reflection.Metadata.dll</Left>
+    <Right>net9.0/System.Reflection.Metadata.dll</Right>
   </Suppression>
 </Suppressions>

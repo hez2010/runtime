@@ -189,6 +189,8 @@ public:
 
     BOOL IsSharedByGenericInstantiations();
 
+    BOOL ContainsGenericVariables(BOOL methodOnly);
+
  protected:
     // See methodtable.h for details of the flags with the same name there
     enum
@@ -639,6 +641,8 @@ public:
     }
 
     BOOL IsSharedByGenericInstantiations();
+
+    BOOL ContainsGenericVariables(BOOL methodOnly);
 
 #ifndef DACCESS_COMPILE
     // Returns TRUE if all return and argument types are externally visible.

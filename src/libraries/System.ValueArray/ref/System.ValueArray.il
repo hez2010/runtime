@@ -131,6 +131,11 @@
       ldnull
       throw
     } // end of method Enumerator::get_Current
+
+    .property instance callconv(8) !T Current()
+    {
+      .get instance !T System.ValueArray`2/Enumerator::get_Current()
+    } // end of property Enumerator::Current
   } // end of class Enumerator
 
   .field private !T _elem
@@ -228,4 +233,15 @@
     ldnull
     throw
   } // end of method ValueArray`2::CopyTo
+
+  .property instance callconv(8) !T Item(int32)
+  {
+    .get instance !T System.ValueArray`2::get_Item(int32)
+    .set instance void System.ValueArray`2::set_Item(int32,
+                                                     !T)
+  } // end of property ValueArray`2::Item
+  .property instance callconv(8) int32 Length()
+  {
+    .get instance int32 System.ValueArray`2::get_Length()
+  } // end of property ValueArray`2::Length
 } // end of class System.ValueArray`2

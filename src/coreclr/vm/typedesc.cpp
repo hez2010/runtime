@@ -120,7 +120,7 @@ BOOL TypeDesc::ContainsGenericVariables(BOOL methodOnly)
         return TypeFromToken(pTyVar->GetTypeOrMethodDef()) == mdtMethodDef;
     }
 
-    if (HasTypeParam())
+    if (!(IsConstValue() || IsConstGenericVariable()) && HasTypeParam())
     {
         return GetRootTypeParam().ContainsGenericVariables(methodOnly);
     }

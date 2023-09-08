@@ -349,6 +349,7 @@ namespace ILCompiler
                             {
                                 File.Copy(Path.ChangeExtension(inputFile.Value, ".pdb"), Path.Combine(Get(_command.PdbPath), Path.ChangeExtension(Path.GetFileName(outFile), ".ni.pdb")), true);
                             }
+                            File.Create(Path.ChangeExtension(outFile, ".ni.r2rmap")).Dispose();
                             return;
                         }
 

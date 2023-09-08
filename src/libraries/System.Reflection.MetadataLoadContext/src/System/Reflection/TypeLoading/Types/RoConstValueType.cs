@@ -41,8 +41,10 @@ namespace System.Reflection.TypeLoading
         public override bool IsUnmanagedFunctionPointer => false;
 
         public override bool ContainsGenericParameters => false;
+#if NET8_0_OR_GREATER
         public override bool IsConstValue => true;
         public override object? ConstValue => _value;
+#endif
 
         public override GenericParameterAttributes GenericParameterAttributes => GenericParameterAttributes.None;
 

@@ -3181,7 +3181,9 @@ BOOL NDirect::MarshalingRequired(
     _In_opt_ PCCOR_SIGNATURE pSig,
     _In_opt_ Module* pModule,
     _In_opt_ SigTypeContext* pTypeContext,
-    _In_ bool unmanagedCallersOnlyRequiresMarshalling)
+    _In_ bool unmanagedCallersOnlyRequiresMarshalling,
+    _In_ bool checkGenericArgumentsOnly
+)
 {
     CONTRACTL
     {
@@ -3290,7 +3292,7 @@ BOOL NDirect::MarshalingRequired(
                 IfFailThrow(arg.GetElemType(NULL)); // skip ELEMENT_TYPE_PTR
                 IfFailThrow(arg.PeekElemType(&type));
 
-                if (runtimeMarshallingEnabled && type == ELEMENT_TYPE_VALUETYPE)
+                if (!checkGenericArgumentsOnly && runtimeMarshallingEnabled && type == ELEMENT_TYPE_VALUETYPE)
                 {
                     if ((arg.HasCustomModifier(pModule,
                                               "Microsoft.VisualC.NeedsCopyConstructorModifier",
@@ -3325,27 +3327,30 @@ BOOL NDirect::MarshalingRequired(
                 if(!hndArgType.IsValueType() ||  !isValidGeneric)
                     return true;
 
-                if (hndArgType.GetMethodTable()->IsInt128OrHasInt128Fields())
+                if (!checkGenericArgumentsOnly || isValidGeneric)
                 {
-                    // Int128 cannot be marshalled by value at this time
-                    return TRUE;
-                }
+                    if (hndArgType.GetMethodTable()->IsInt128OrHasInt128Fields())
+                    {
+                        // Int128 cannot be marshalled by value at this time
+                        return TRUE;
+                    }
 
-                // When the runtime runtime marshalling system is disabled, we don't support
-                // any types that contain gc pointers, but all "unmanaged" types are treated as blittable
-                // as long as they aren't auto-layout and don't have any auto-layout fields.
-                if (!runtimeMarshallingEnabled &&
-                    !hndArgType.IsEnum() &&
-                    (hndArgType.GetMethodTable()->ContainsPointers()
-                        || hndArgType.GetMethodTable()->IsAutoLayoutOrHasAutoLayoutField()))
-                {
-                    return TRUE;
-                }
-                else if (runtimeMarshallingEnabled && !hndArgType.IsBlittable() && !hndArgType.IsEnum())
-                {
-                    // When the runtime runtime marshalling system is enabled, we do special handling
-                    // for any types that aren't blittable or enums.
-                    return TRUE;
+                    // When the runtime runtime marshalling system is disabled, we don't support
+                    // any types that contain gc pointers, but all "unmanaged" types are treated as blittable
+                    // as long as they aren't auto-layout and don't have any auto-layout fields.
+                    if (!runtimeMarshallingEnabled &&
+                        !hndArgType.IsEnum() &&
+                        (hndArgType.GetMethodTable()->ContainsPointers()
+                            || hndArgType.GetMethodTable()->IsAutoLayoutOrHasAutoLayoutField()))
+                    {
+                        return TRUE;
+                    }
+                    else if (runtimeMarshallingEnabled && !hndArgType.IsBlittable() && !hndArgType.IsEnum())
+                    {
+                        // When the runtime runtime marshalling system is enabled, we do special handling
+                        // for any types that aren't blittable or enums.
+                        return TRUE;
+                    }
                 }
 
                 if (i > 0)
@@ -3362,7 +3367,7 @@ BOOL NDirect::MarshalingRequired(
                 // When runtime marshalling is enabled:
                 // Bool requires marshaling
                 // Char may require marshaling (MARSHAL_TYPE_ANSICHAR)
-                if (runtimeMarshallingEnabled)
+                if (!checkGenericArgumentsOnly && runtimeMarshallingEnabled)
                 {
                     return TRUE;
                 }
@@ -3381,7 +3386,7 @@ BOOL NDirect::MarshalingRequired(
                         dwStackSize += StackElemSize(CorTypeInfo::Size(type), isValueType, isFloatHfa);
                     }
                 }
-                else
+                else if (!checkGenericArgumentsOnly)
                 {
                     // other non-primitive type - requires marshaling
                     return TRUE;
@@ -3395,7 +3400,7 @@ BOOL NDirect::MarshalingRequired(
         // We only check the MarshalAs info when the runtime marshalling system is enabled.
         // We ignore MarshalAs when the system is disabled, so no reason to disqualify from inlining
         // when it is present.
-        if (runtimeMarshallingEnabled && pParamTokenArray[i] != mdParamDefNil)
+        if (!checkGenericArgumentsOnly && runtimeMarshallingEnabled && pParamTokenArray[i] != mdParamDefNil)
         {
             if (!ParseNativeTypeInfo(pParamTokenArray[i], pMDImport, &paramInfo) ||
                 paramInfo.m_NativeType != NATIVE_TYPE_DEFAULT)
@@ -3410,7 +3415,7 @@ BOOL NDirect::MarshalingRequired(
         IfFailThrow(ptr.SkipExactlyOne());
     }
 
-    if (!FitsInU2(dwStackSize))
+    if (!checkGenericArgumentsOnly && !FitsInU2(dwStackSize))
         return TRUE;
 
     // do not set the stack size for varargs - the number is call site specific
@@ -5045,7 +5050,7 @@ namespace
                                     {
                                         // For generic calli, we only support blittable types
                                         if (SF_IsCALLIStub(dwStubFlags)
-                                            && NDirect::MarshalingRequired(NULL, pStubMD->GetSig(), pSigDesc->m_pModule, &pSigDesc->m_typeContext))
+                                            && NDirect::MarshalingRequired(NULL, pStubMD->GetSig(), pSigDesc->m_pModule, &pSigDesc->m_typeContext, true, true))
                                         {
                                             COMPlusThrow(kMarshalDirectiveException, IDS_EE_BADMARSHAL_GENERICS_RESTRICTION);
                                         }

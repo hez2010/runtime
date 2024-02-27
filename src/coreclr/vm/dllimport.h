@@ -104,7 +104,8 @@ public:
         _In_opt_ PCCOR_SIGNATURE pSig = NULL,
         _In_opt_ Module* pModule = NULL,
         _In_opt_ SigTypeContext* pTypeContext = NULL,
-        _In_ bool unmanagedCallersOnlyRequiresMarshalling = true);
+        _In_ bool unmanagedCallersOnlyRequiresMarshalling = true,
+        _In_ bool checkGenericArgumentsOnly = false);
 
     static void PopulateNDirectMethodDesc(_Inout_ NDirectMethodDesc* pNMD);
     static void InitializeSigInfoAndPopulateNDirectMethodDesc(_Inout_ NDirectMethodDesc* pNMD, _Inout_ PInvokeStaticSigInfo* pSigInfo);

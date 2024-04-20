@@ -1659,7 +1659,6 @@ void ExceptionTracker::InitializeCrawlFrame(CrawlFrame* pcfThisFrame, Thread* pT
     {
         pcfThisFrame->isFrameless = true;
         pcfThisFrame->pFunc = pcfThisFrame->codeInfo.GetMethodDesc();
-        pcfThisFrame->InitializeExactGenericInstantiations();
         *puMethodStartPC = pcfThisFrame->codeInfo.GetStartAddress();
     }
     else
@@ -2580,6 +2579,7 @@ CLRUnwindStatus ExceptionTracker::ProcessManagedCallFrame(
     UINT_PTR        uControlPC  = (UINT_PTR)GetControlPC(pcfThisFrame->GetRegisterSet());
     CLRUnwindStatus ReturnStatus = UnwindPending;
 
+    pcfThisFrame->InitializeExactGenericInstantiations();
     MethodDesc*     pMD         = pcfThisFrame->GetFunction();
 
     bool fIsFirstPass = !(dwExceptionFlags & EXCEPTION_UNWINDING);

@@ -294,12 +294,9 @@ void CrawlFrame::InitializeExactGenericInstantiations()
 {
     CONTRACTL {
         SUPPORTS_DAC;
-        NOTHROW;
-        GC_NOTRIGGER;
+        THROWS;
+        GC_TRIGGERS;
     } CONTRACTL_END;
-
-    // Turn into cooperative GC mode
-    GCX_COOP();
 
     if (pFunc != NULL && pFunc->HasClassOrMethodInstantiation() && pFunc->IsSharedByGenericInstantiations())
     {
@@ -315,12 +312,7 @@ void CrawlFrame::InitializeExactGenericInstantiations()
 #ifndef DACCESS_COMPILE
                 if (pConstructedFunc->IsSharedByGenericInstantiations())
                 {
-                    InstantiatedMethodDesc *pInstMD = InstantiatedMethodDesc::FindLoadedInstantiatedMethodDesc(th.GetMethodTable(), pConstructedFunc->GetMemberDef(), Instantiation(), false);
-
-                    if (pInstMD != NULL)
-                    {
-                        pConstructedFunc = pInstMD;
-                    }
+                    pConstructedFunc = InstantiatedMethodDesc::FindOrCreateExactClassMethod(th.GetMethodTable(), pConstructedFunc);
                 }
 #endif // !DACCESS_COMPILE
                 pFunc = pConstructedFunc;
@@ -3064,7 +3056,6 @@ void StackFrameIterator::ProcessCurrentFrame(void)
 #endif // FEATURE_EH_FUNCLETS
 
             m_crawl.pFunc = m_crawl.codeInfo.GetMethodDesc();
-            m_crawl.InitializeExactGenericInstantiations();
 
             // Cache values which may be updated by CheckForSkippedFrames()
             m_cachedCodeInfo = m_crawl.codeInfo;

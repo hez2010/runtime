@@ -1468,7 +1468,7 @@ BOOL TypeVarTypeDesc::SatisfiesConstraints(SigTypeContext *pTypeContextOfConstra
                 return FALSE;
         }
 
-        if (thArg.IsByRefLike() && (specialConstraints & gpAllowByRefLike) == 0)
+        if ((thArg.IsByRefLike() || thArg.IsByRef()) && (specialConstraints & gpAllowByRefLike) == 0)
             return FALSE;
     }
 

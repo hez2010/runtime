@@ -509,8 +509,7 @@ BOOL CheckInstantiation(Instantiation inst)
             return TRUE;
         }
 
-        if (   type == ELEMENT_TYPE_BYREF
-            || type == ELEMENT_TYPE_TYPEDBYREF
+        if (   type == ELEMENT_TYPE_TYPEDBYREF
             || type == ELEMENT_TYPE_VOID
             || type == ELEMENT_TYPE_PTR
             || type == ELEMENT_TYPE_FNPTR)

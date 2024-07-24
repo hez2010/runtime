@@ -52,3 +52,4 @@ using std::min;
 #include "bitvec.h"
 #include "inline.h"
 #include "objectalloc.h"
+#include "disjointsets.h"

@@ -314,6 +314,7 @@ set( JIT_HEADERS
   debuginfo.h
   decomposelongs.h
   disasm.h
+  disjointsets.h
   emit.h
   emitdef.h
   emitfmts.h

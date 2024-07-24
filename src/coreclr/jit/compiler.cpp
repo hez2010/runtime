@@ -7726,8 +7726,8 @@ VarScopeDsc* Compiler::compGetNextExitScope(unsigned offs, bool scan)
 
 void Compiler::compProcessScopesUntil(unsigned   offset,
                                       VARSET_TP* inScope,
-                                      void (Compiler::*enterScopeFn)(VARSET_TP* inScope, VarScopeDsc*),
-                                      void (Compiler::*exitScopeFn)(VARSET_TP* inScope, VarScopeDsc*))
+                                      void       (Compiler::*enterScopeFn)(VARSET_TP* inScope, VarScopeDsc*),
+                                      void       (Compiler::*exitScopeFn)(VARSET_TP* inScope, VarScopeDsc*))
 {
     assert(offset != BAD_IL_OFFSET);
     assert(inScope != nullptr);

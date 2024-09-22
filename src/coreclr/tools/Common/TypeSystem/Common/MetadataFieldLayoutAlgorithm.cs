@@ -21,12 +21,6 @@ namespace Internal.TypeSystem
                 ThrowHelper.ThrowTypeLoadException(ExceptionStringID.ClassLoadGeneral, type);
             }
 
-            // CLI - Partition 1, section 9.5 - Generic types shall not be marked explicitlayout.
-            if (type.HasInstantiation && type.IsExplicitLayout)
-            {
-                ThrowHelper.ThrowTypeLoadException(ExceptionStringID.ClassLoadExplicitGeneric, type.GetTypeDefinition());
-            }
-
             // Count the number of instance fields in advance for convenience
             int numInstanceFields = 0;
             foreach (var field in type.GetFields())

@@ -11983,11 +11983,6 @@ MethodTableBuilder::GatherGenericsInfo(
             {
                 pModule->GetAssembly()->ThrowTypeLoadException(pInternalImport, cl, IDS_CLASSLOAD_BADFORMAT);
             }
-            // A generic with explicit layout is not allowed.
-            if (IsTdExplicitLayout(dwAttr))
-            {
-                pModule->GetAssembly()->ThrowTypeLoadException(pInternalImport, cl, IDS_CLASSLOAD_EXPLICIT_GENERIC);
-            }
         }
 
         bmtGenericsInfo->numDicts = 1;

@@ -371,10 +371,6 @@ mono_class_setup_fields (MonoClass *klass)
 				mono_class_set_type_load_failure (klass, "Field '%s' has a negative offset %d", field->name, offset);
 				break;
 			}
-			if (mono_class_is_gtd (klass)) {
-				mono_class_set_type_load_failure (klass, "Generic class cannot have explicit layout.");
-				break;
-			}
 			if (m_class_is_inlinearray (klass)) {
 				if (mono_get_runtime_callbacks ()->mono_class_set_deferred_type_load_failure_callback) {
 					if (mono_get_runtime_callbacks ()->mono_class_set_deferred_type_load_failure_callback (klass, "Inline array struct must not have explicit layout."))

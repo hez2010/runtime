@@ -10,7 +10,6 @@ namespace Internal.TypeSystem
     {
         // TypeLoadException
         ClassLoadGeneral,
-        ClassLoadExplicitGeneric,
         ClassLoadBadFormat,
         ClassLoadExplicitLayout,
         ClassLoadValueClassTooLarge,

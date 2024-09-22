@@ -4178,9 +4178,6 @@
   <data name="ClassLoad_InlineArrayExplicit" xml:space="preserve">
     <value>InlineArrayAttribute cannot be applied to a type with explicit layout. Type: '{0}'.  Assembly: '{1}'.</value>
   </data>
-  <data name="ClassLoad_ExplicitGeneric" xml:space="preserve">
-    <value>Could not load type '{0}' from assembly '{1}' because generic types cannot have explicit layout.</value>
-  </data>
   <data name="ClassLoad_BadFormat" xml:space="preserve">
     <value>Could not load type '{0}' from assembly '{1}' because the format is invalid.</value>
   </data>

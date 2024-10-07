@@ -1451,13 +1451,15 @@ bool Compiler::optTryUnrollLoop(FlowGraphNaturalLoop* loop, bool* changedIR)
 
     JITDUMP("Computed loop repetition count (number of test block executions) to be %u\n", totalIter);
 
+    bool partialUnroll = false;
+
     // Forget it if there are too many repetitions or not a constant loop.
 
     if (totalIter > iterLimit)
     {
-        JITDUMP("Failed to unroll loop " FMT_LP ": too many iterations (%d > %d) (heuristic)\n", loop->GetIndex(),
-                totalIter, iterLimit);
-        return false;
+        JITDUMP("Switch to partial unroll loop " FMT_LP ": too many iterations (%d > %d) (heuristic)\n",
+                loop->GetIndex(), totalIter, iterLimit);
+        partialUnroll = true;
     }
 
     int unrollLimitSz = UNROLL_LIMIT_SZ[compCodeOpt()];
@@ -1484,8 +1486,10 @@ bool Compiler::optTryUnrollLoop(FlowGraphNaturalLoop* loop, bool* changedIR)
     }
     else
     {
-        JITDUMP("Failed to unroll loop " FMT_LP ": insufficiently simple loop (heuristic)\n", loop->GetIndex());
-        return false;
+        // We can partial unroll this
+        JITDUMP("Switch to partial unroll loop " FMT_LP ": insufficiently simple loop (heuristic)\n", loop->GetIndex());
+        unrollLimitSz = INT_MAX;
+        partialUnroll = true;
     }
 
     GenTree* incr = iterInfo.IterTree;
@@ -1616,60 +1620,132 @@ bool Compiler::optTryUnrollLoop(FlowGraphNaturalLoop* loop, bool* changedIR)
     BasicBlock* exit =
         loop->ContainsBlock(exiting->GetTrueTarget()) ? exiting->GetFalseTarget() : exiting->GetTrueTarget();
 
-    for (int lval = lbeg; iterToUnroll > 0; iterToUnroll--)
+    if (partialUnroll)
     {
+        unsigned    iterPerBatch  = static_cast<unsigned>(JitConfig.JitPartialUnrollLoopIterationCount());
+        unsigned    iterRemainder = totalIter % iterPerBatch;
+        BasicBlock* newEntry      = nullptr;
+
+        GenTree* limit         = iterInfo.Limit();
+        ssize_t  newLimitValue = static_cast<ssize_t>(totalIter - iterRemainder);
+        newLimitValue          = iterOper == GT_ADD ? lbeg + newLimitValue * iterInc : lbeg - newLimitValue * iterInc;
+        GenTree* newLimit      = gtNewIconNode(newLimitValue, genActualType(limit));
+        limit->ReplaceWith(newLimit, this);
+
         // Block weight should no longer have the loop multiplier
         //
         // Note this is not quite right, as we may not have upscaled by this amount
         // and we might not have upscaled at all, if we had profile data.
         //
         weight_t scaleWeight = 1.0 / BB_LOOP_WEIGHT_SCALE;
-        loop->Duplicate(&insertAfter, &blockMap, scaleWeight);
-
-        // Replace all uses of the loop iterator with the current value.
-        loop->VisitLoopBlocks([=, &blockMap](BasicBlock* block) {
-            optReplaceScalarUsesWithConst(blockMap[block], lvar, lval);
-            return BasicBlockVisit::Continue;
-        });
-
-        // Remove the test we created in the duplicate; we're doing a full unroll.
-        BasicBlock* testBlock = blockMap[iterInfo.TestBlock];
-
-        optRedirectPrevUnrollIteration(loop, prevTestBlock, blockMap[loop->GetHeader()]);
-
-        // Save the test block of the previously unrolled
-        // iteration, so that we can redirect it when we create
-        // the next iteration (or to the exit for the last
-        // iteration).
-        prevTestBlock = testBlock;
-
-        // update the new value for the unrolled iterator
-
-        switch (iterOper)
+        for (unsigned iter = 0; iter < iterPerBatch; iter++)
         {
-            case GT_ADD:
-                lval += iterInc;
-                break;
+            loop->Duplicate(&insertAfter, &blockMap, scaleWeight);
+            if (iter == 0)
+            {
+                newEntry = insertAfter;
+            }
 
-            case GT_SUB:
-                lval -= iterInc;
-                break;
+            // Remove the test we created in the duplicate.
+            BasicBlock* testBlock = blockMap[iterInfo.TestBlock];
 
-            default:
-                unreached();
+            optRedirectPrevUnrollIteration(loop, prevTestBlock, blockMap[loop->GetHeader()]);
+
+            // Save the test block of the previously unrolled
+            // iteration, so that we can redirect it when we create
+            // the next iteration (or to the exit for the last
+            // iteration).
+            prevTestBlock = testBlock;
+        }
+
+        fgRedirectTrueEdge(prevTestBlock, newEntry);
+
+        if (iterRemainder > 0)
+        {
+            // Do a full unroll for the last iteration.
+            for (unsigned iter = 0; iter < iterRemainder; iter++)
+            {
+                loop->Duplicate(&insertAfter, &blockMap, scaleWeight);
+
+                // Remove the test we created in the duplicate.
+                BasicBlock* testBlock = blockMap[iterInfo.TestBlock];
+
+                if (iter != 0)
+                {
+                    optRedirectPrevUnrollIteration(loop, prevTestBlock, blockMap[loop->GetHeader()]);
+                }
+                else
+                {
+                    fgRedirectFalseEdge(prevTestBlock, insertAfter);
+                }
+
+                // Save the test block of the previously unrolled
+                // iteration, so that we can redirect it when we create
+                // the next iteration (or to the exit for the last
+                // iteration).
+                prevTestBlock = testBlock;
+            }
+
+            optRedirectPrevUnrollIteration(loop, prevTestBlock, exit);
         }
     }
+    else
+    {
+        for (int lval = lbeg; iterToUnroll > 0; iterToUnroll--)
+        {
+            // Block weight should no longer have the loop multiplier
+            //
+            // Note this is not quite right, as we may not have upscaled by this amount
+            // and we might not have upscaled at all, if we had profile data.
+            //
+            weight_t scaleWeight = 1.0 / BB_LOOP_WEIGHT_SCALE;
+            loop->Duplicate(&insertAfter, &blockMap, scaleWeight);
 
-    // If we get here, we successfully cloned all the blocks in the
-    // unrolled loop. Note we may not have done any cloning at all if
-    // the loop iteration count was computed to be zero. Such loops are
-    // guaranteed to be unreachable since if the repetition count is
-    // zero the loop invariant is false on the first iteration, yet
-    // FlowGraphNaturalLoop::AnalyzeIteration only returns true if the
-    // loop invariant is true on every iteration. That means we have a
-    // guarding check before we enter the loop that will always be
-    // false.
-    optRedirectPrevUnrollIteration(loop, prevTestBlock, exit);
+            // Replace all uses of the loop iterator with the current value.
+            loop->VisitLoopBlocks([=, &blockMap](BasicBlock* block) {
+                optReplaceScalarUsesWithConst(blockMap[block], lvar, lval);
+                return BasicBlockVisit::Continue;
+            });
+
+            // Remove the test we created in the duplicate; we're doing a full unroll.
+            BasicBlock* testBlock = blockMap[iterInfo.TestBlock];
+
+            optRedirectPrevUnrollIteration(loop, prevTestBlock, blockMap[loop->GetHeader()]);
+
+            // Save the test block of the previously unrolled
+            // iteration, so that we can redirect it when we create
+            // the next iteration (or to the exit for the last
+            // iteration).
+            prevTestBlock = testBlock;
+
+            // update the new value for the unrolled iterator
+
+            switch (iterOper)
+            {
+                case GT_ADD:
+                    lval += iterInc;
+                    break;
+
+                case GT_SUB:
+                    lval -= iterInc;
+                    break;
+
+                default:
+                    unreached();
+            }
+        }
+
+        // If we get here, we successfully cloned all the blocks in the
+        // unrolled loop. Note we may not have done any cloning at all if
+        // the loop iteration count was computed to be zero. Such loops are
+        // guaranteed to be unreachable since if the repetition count is
+        // zero the loop invariant is false on the first iteration, yet
+        // FlowGraphNaturalLoop::AnalyzeIteration only returns true if the
+        // loop invariant is true on every iteration. That means we have a
+        // guarding check before we enter the loop that will always be
+        // false.
+        optRedirectPrevUnrollIteration(loop, prevTestBlock, exit);
+    }
 
     // The old loop body is unreachable now, but we will remove those
     // blocks after we finish unrolling.

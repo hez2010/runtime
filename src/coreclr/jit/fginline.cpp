@@ -608,19 +608,19 @@ private:
                                 ? m_compiler->gtNewInlineCandidateReturnExpr(call->AsCall(),
                                                                              genActualType(call->TypeGet()))
                                 : nullptr;
-                        unsigned lclNum    = BAD_VAR_NUM;
+                        unsigned lclNum = BAD_VAR_NUM;
                         bool     needSpill =
                             call->TypeGet() != TYP_VOID && (parent == nullptr || !parent->OperIs(GT_STORE_LCL_VAR) ||
                                                             !parent->TypeIs(call->TypeGet()));
                         if (needSpill)
                         {
-                            lclNum  = m_compiler->lvaGrabTemp(true DEBUGARG("fgInline - late devirtualization"));
+                            lclNum = m_compiler->lvaGrabTemp(true DEBUGARG("fgInline - late devirtualization"));
                             m_compiler->lvaGetDesc(lclNum)->lvType = retExpr->TypeGet();
                         }
                         else if (parent != nullptr && parent->OperIs(GT_STORE_LCL_VAR) &&
                                  parent->TypeIs(call->TypeGet()))
                         {
-                            lclNum = parent->AsLclVarCommon()->GetLclNum();
+                            lclNum               = parent->AsLclVarCommon()->GetLclNum();
                             retExpr->gtSubstExpr = parent;
                         }
 

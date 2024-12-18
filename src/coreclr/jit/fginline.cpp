@@ -315,7 +315,7 @@ private:
     //    the functions makes necessary updates. It could happen if there was
     //    an implicit conversion in the inlinee body.
     //
-    void UpdateInlineReturnExpressionPlaceHolder(GenTree** use, GenTree* parent)
+    void UpdateInlineReturnExpressionPlaceHolder(GenTree** use, GenTree* parent, bool processNested = true)
     {
         while ((*use)->OperIs(GT_RET_EXPR))
         {
@@ -331,7 +331,7 @@ private:
                 GenTreeRetExpr* retExpr = inlineCandidate->AsRetExpr();
                 inlineCandidate         = retExpr->gtSubstExpr;
                 inlineeBB               = retExpr->gtSubstBB;
-            } while (inlineCandidate->OperIs(GT_RET_EXPR));
+            } while (processNested && inlineCandidate->OperIs(GT_RET_EXPR));
 
             // We might as well try and fold the return value. Eg returns of
             // constant bools will have CASTS. This folding may uncover more
@@ -385,6 +385,11 @@ private:
                 printf("\n");
             }
 #endif // DEBUG
+
+            if (!processNested)
+            {
+                break;
+            }
         }
 
         // If the inline was rejected and returns a retbuffer, then mark that
@@ -586,8 +591,96 @@ private:
                 }
 
                 CORINFO_CONTEXT_HANDLE contextInput = context;
+                context                             = nullptr;
                 m_compiler->impDevirtualizeCall(call, nullptr, &method, &methodFlags, &contextInput, &context,
                                                 isLateDevirtualization, explicitTailCall);
+                if (context != nullptr)
+                {
+                    m_compiler->impMarkInlineCandidate(call, context, false, nullptr, call->gtRawILOffset);
+
+                    const bool isInlineCandidate                  = call->IsInlineCandidate();
+                    const bool isGuardedDevirtualizationCandidate = call->IsGuardedDevirtualizationCandidate();
+
+                    if (isInlineCandidate || isGuardedDevirtualizationCandidate)
+                    {
+                        GenTreeRetExpr* retExpr =
+                            call->TypeGet() != TYP_VOID
+                                ? m_compiler->gtNewInlineCandidateReturnExpr(call->AsCall(),
+                                                                             genActualType(call->TypeGet()))
+                                : nullptr;
+                        unsigned lclNum    = BAD_VAR_NUM;
+                        bool     needSpill =
+                            call->TypeGet() != TYP_VOID && (parent == nullptr || !parent->OperIs(GT_STORE_LCL_VAR) ||
+                                                            !parent->TypeIs(call->TypeGet()));
+                        if (needSpill)
+                        {
+                            lclNum  = m_compiler->lvaGrabTemp(true DEBUGARG("fgInline - late devirtualization"));
+                            m_compiler->lvaGetDesc(lclNum)->lvType = retExpr->TypeGet();
+                        }
+                        else if (parent != nullptr && parent->OperIs(GT_STORE_LCL_VAR) &&
+                                 parent->TypeIs(call->TypeGet()))
+                        {
+                            lclNum = parent->AsLclVarCommon()->GetLclNum();
+                            retExpr->gtSubstExpr = parent;
+                        }
+
+                        if (lclNum != BAD_VAR_NUM)
+                        {
+                            retExpr->gtSubstExpr = m_compiler->gtNewLclVarNode(lclNum, genActualType(call->TypeGet()));
+                            retExpr->gtSubstBB   = m_compiler->compCurBB;
+                        }
+
+                        if (call->IsGuardedDevirtualizationCandidate())
+                        {
+                            for (uint8_t i = 0; i < call->GetInlineCandidatesCount(); i++)
+                            {
+                                call->GetGDVCandidateInfo(i)->retExpr              = retExpr;
+                                call->GetGDVCandidateInfo(i)->preexistingSpillTemp = lclNum;
+                                call->GetGDVCandidateInfo(i)->exactContextHandle   = context;
+                                call->GetGDVCandidateInfo(i)->inlinersContext      = call->gtInlineContext;
+                            }
+                        }
+                        else
+                        {
+                            call->GetSingleInlineCandidateInfo()->retExpr              = retExpr;
+                            call->GetSingleInlineCandidateInfo()->preexistingSpillTemp = lclNum;
+                            call->GetSingleInlineCandidateInfo()->exactContextHandle   = context;
+                            call->GetSingleInlineCandidateInfo()->inlinersContext      = call->gtInlineContext;
+                        }
+
+                        Statement* stmt  = m_compiler->gtNewStmt(call);
+                        Statement* store = nullptr;
+
+                        if (retExpr != nullptr)
+                        {
+                            m_compiler->fgInsertStmtBefore(m_compiler->compCurBB, m_compiler->compCurStmt, stmt);
+                            *pTree = retExpr;
+                        }
+
+                        if (needSpill)
+                        {
+                            store = m_compiler->gtNewStmt(m_compiler->gtNewStoreLclVarNode(lclNum, retExpr));
+                            m_compiler->fgInsertStmtBefore(m_compiler->compCurBB, m_compiler->compCurStmt, store);
+                        }
+
+                        InlineResult inlineResult(m_compiler, call, stmt, "fgInline - late devirtualization");
+                        m_compiler->fgMorphStmt = stmt;
+                        m_compiler->fgMorphCallInline(call, &inlineResult);
+
+                        if (stmt->GetRootNode()->IsNothingNode())
+                        {
+                            m_compiler->fgRemoveStmt(m_compiler->compCurBB, stmt);
+                        }
+
+                        if (needSpill && !retExpr->gtSubstExpr->OperIs(GT_LCL_VAR))
+                        {
+                            m_compiler->fgRemoveStmt(m_compiler->compCurBB, store);
+                        }
+
+                        UpdateInlineReturnExpressionPlaceHolder(pTree, parent, false);
+                        m_compiler->compCurStmt = nullptr;
+                    }
+                }
                 m_madeChanges = true;
             }
         }
@@ -730,7 +823,8 @@ PhaseStatus Compiler::fgInline()
     do
     {
         // Make the current basic block address available globally
-        compCurBB = block;
+        compCurBB   = block;
+        bool repeat = false;
 
         for (Statement* const stmt : block->Statements())
         {
@@ -755,7 +849,14 @@ PhaseStatus Compiler::fgInline()
             // possible further optimization, as the (now complete) GT_RET_EXPR
             // replacement may have enabled optimizations by providing more
             // specific types for trees or variables.
+            compCurStmt = stmt;
             walker.WalkTree(stmt->GetRootNodePointer(), nullptr);
+            if (compCurStmt == nullptr)
+            {
+                // Inlining happened during late devirt, repeat the walk for the current block.
+                repeat = true;
+                break;
+            }
 
             GenTree* expr = stmt->GetRootNode();
 
@@ -807,7 +908,10 @@ PhaseStatus Compiler::fgInline()
             }
         }
 
-        block = block->Next();
+        if (!repeat)
+        {
+            block = block->Next();
+        }
 
     } while (block);
 

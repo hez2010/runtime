@@ -641,7 +641,7 @@ private:
                                 call->GetGDVCandidateInfo(i)->retExpr              = retExpr;
                                 call->GetGDVCandidateInfo(i)->preexistingSpillTemp = lclNum;
                                 call->GetGDVCandidateInfo(i)->exactContextHandle   = context;
-                                call->GetGDVCandidateInfo(i)->inlinersContext      = call->gtInlineContext;
+                                INDEBUG(call->gtInlineContext = call->GetGDVCandidateInfo(i)->inlinersContext);
                             }
                         }
                         else
@@ -649,7 +649,7 @@ private:
                             call->GetSingleInlineCandidateInfo()->retExpr              = retExpr;
                             call->GetSingleInlineCandidateInfo()->preexistingSpillTemp = lclNum;
                             call->GetSingleInlineCandidateInfo()->exactContextHandle   = context;
-                            call->GetSingleInlineCandidateInfo()->inlinersContext      = call->gtInlineContext;
+                            INDEBUG(call->gtInlineContext = call->GetSingleInlineCandidateInfo()->inlinersContext);
                         }
 
                         Statement* stmt  = m_compiler->gtNewStmt(call);

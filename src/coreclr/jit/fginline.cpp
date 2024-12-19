@@ -608,10 +608,7 @@ private:
                     if (isInlineCandidate || isGuardedDevirtualizationCandidate)
                     {
                         GenTreeRetExpr* retExpr =
-                            call->TypeGet() != TYP_VOID
-                                ? m_compiler->gtNewInlineCandidateReturnExpr(call->AsCall(),
-                                                                             genActualType(call->TypeGet()))
-                                : nullptr;
+                            m_compiler->gtNewInlineCandidateReturnExpr(call->AsCall(), genActualType(call->TypeGet()));
                         unsigned lclNum = BAD_VAR_NUM;
                         bool     needSpill =
                             call->TypeGet() != TYP_VOID && (parent == nullptr || !parent->OperIs(GT_STORE_LCL_VAR) ||
@@ -655,11 +652,8 @@ private:
                         Statement* stmt  = m_compiler->gtNewStmt(call);
                         Statement* store = nullptr;
 
-                        if (retExpr != nullptr)
-                        {
-                            m_compiler->fgInsertStmtBefore(m_compiler->compCurBB, m_compiler->compCurStmt, stmt);
-                            *pTree = retExpr;
-                        }
+                        m_compiler->fgInsertStmtBefore(m_compiler->compCurBB, m_compiler->compCurStmt, stmt);
+                        *pTree = retExpr;
 
                         if (needSpill)
                         {
@@ -681,7 +675,15 @@ private:
                             m_compiler->fgRemoveStmt(m_compiler->compCurBB, store);
                         }
 
-                        UpdateInlineReturnExpressionPlaceHolder(pTree, parent, false);
+                        if ((*pTree)->AsRetExpr()->gtSubstExpr == nullptr)
+                        {
+                            m_compiler->fgRemoveStmt(m_compiler->compCurBB, m_compiler->compCurStmt);
+                        }
+                        else
+                        {
+                            UpdateInlineReturnExpressionPlaceHolder(pTree, parent, false);
+                        }
+
                         m_compiler->compCurStmt = nullptr;
                     }
                 }

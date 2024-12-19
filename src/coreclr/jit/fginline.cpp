@@ -596,7 +596,11 @@ private:
                                                 isLateDevirtualization, explicitTailCall);
                 if (context != nullptr)
                 {
-                    m_compiler->impMarkInlineCandidate(call, context, false, nullptr, call->gtRawILOffset);
+                    IL_OFFSET ilOffset = m_compiler->compCurStmt->GetDebugInfo().GetLocation().GetOffset();
+                    CORINFO_CALL_INFO callInfo = {};
+                    callInfo.hMethod           = method;
+                    callInfo.methodFlags       = methodFlags;
+                    m_compiler->impMarkInlineCandidate(call, context, false, &callInfo, ilOffset);
 
                     const bool isInlineCandidate                  = call->IsInlineCandidate();
                     const bool isGuardedDevirtualizationCandidate = call->IsGuardedDevirtualizationCandidate();

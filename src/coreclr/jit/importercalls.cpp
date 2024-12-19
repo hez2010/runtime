@@ -7670,7 +7670,7 @@ void Compiler::impMarkInlineCandidateHelper(GenTreeCall*           call,
         fncHandle = call->gtCallMethHnd;
 
         // Reuse method flags from the original callInfo if possible
-        if (callInfo != nullptr && fncHandle == callInfo->hMethod)
+        if (fncHandle == callInfo->hMethod)
         {
             methAttr = callInfo->methodFlags;
         }

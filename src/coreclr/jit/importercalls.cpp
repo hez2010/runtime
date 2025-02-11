@@ -165,35 +165,6 @@ var_types Compiler::impImportCall(OPCODE                  opcode,
                    opcodeNames[opcode], callInfo->kind, varTypeName(callRetTyp), structSize);
         }
 #endif
-        if (compIsForInlining())
-        {
-            /* Does the inlinee use StackCrawlMark */
-
-            if (mflags & CORINFO_FLG_DONT_INLINE_CALLER)
-            {
-                compInlineResult->NoteFatal(InlineObservation::CALLEE_STACK_CRAWL_MARK);
-                return TYP_UNDEF;
-            }
-
-            /* For now ignore varargs */
-            if ((sig->callConv & CORINFO_CALLCONV_MASK) == CORINFO_CALLCONV_NATIVEVARARG)
-            {
-                compInlineResult->NoteFatal(InlineObservation::CALLEE_HAS_NATIVE_VARARGS);
-                return TYP_UNDEF;
-            }
-
-            if ((sig->callConv & CORINFO_CALLCONV_MASK) == CORINFO_CALLCONV_VARARG)
-            {
-                compInlineResult->NoteFatal(InlineObservation::CALLEE_HAS_MANAGED_VARARGS);
-                return TYP_UNDEF;
-            }
-
-            if ((mflags & CORINFO_FLG_VIRTUAL) && (sig->sigInst.methInstCount != 0) && (opcode == CEE_CALLVIRT))
-            {
-                compInlineResult->NoteFatal(InlineObservation::CALLEE_IS_GENERIC_VIRTUAL);
-                return TYP_UNDEF;
-            }
-        }
 
         clsHnd = pResolvedToken->hClass;
 
@@ -7610,13 +7581,31 @@ void Compiler::impMarkInlineCandidateHelper(GenTreeCall*           call,
 
     if (call->IsVirtual())
     {
+        if (callInfo->sig.sigInst.methInstCount != 0)
+        {
+            inlineResult->NoteFatal(InlineObservation::CALLEE_IS_GENERIC_VIRTUAL);
+            return;
+        }
         // Allow guarded devirt calls to be treated as inline candidates,
         // but reject all other virtual calls.
-        if (!call->IsGuardedDevirtualizationCandidate())
+        else if (!call->IsGuardedDevirtualizationCandidate())
         {
             inlineResult->NoteFatal(InlineObservation::CALLSITE_IS_NOT_DIRECT);
             return;
         }
+    }
+
+    /* For now ignore varargs */
+    if ((callInfo->sig.callConv & CORINFO_CALLCONV_MASK) == CORINFO_CALLCONV_NATIVEVARARG)
+    {
+        inlineResult->NoteFatal(InlineObservation::CALLEE_HAS_NATIVE_VARARGS);
+        return;
+    }
+
+    if ((callInfo->sig.callConv & CORINFO_CALLCONV_MASK) == CORINFO_CALLCONV_VARARG)
+    {
+        inlineResult->NoteFatal(InlineObservation::CALLEE_HAS_MANAGED_VARARGS);
+        return;
     }
 
     /* Ignore helper calls */
@@ -7686,6 +7675,14 @@ void Compiler::impMarkInlineCandidateHelper(GenTreeCall*           call,
     if (compDoAggressiveInlining)
     {
         methAttr |= CORINFO_FLG_FORCEINLINE;
+    }
+
+    /* Does the inlinee use StackCrawlMark */
+
+    if (methAttr & CORINFO_FLG_DONT_INLINE_CALLER)
+    {
+        inlineResult->NoteFatal(InlineObservation::CALLEE_STACK_CRAWL_MARK);
+        return;
     }
 
     if (!(methAttr & CORINFO_FLG_FORCEINLINE))

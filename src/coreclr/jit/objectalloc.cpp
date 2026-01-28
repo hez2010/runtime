@@ -57,6 +57,7 @@ ObjectAllocator::ObjectAllocator(Compiler* comp)
     , m_trackFields(false)
     , m_StoreAddressToIndexMap(comp->getAllocator(CMK_ObjectAllocator))
     , m_initialMaxBlockID(comp->compBasicBlockID)
+    , m_loops(nullptr)
 {
     m_EscapingPointers                = BitVecOps::UninitVal();
     m_PossiblyStackPointingPointers   = BitVecOps::UninitVal();
@@ -64,6 +65,109 @@ ObjectAllocator::ObjectAllocator(Compiler* comp)
     m_ConnGraphAdjacencyMatrix        = nullptr;
     m_StackAllocMaxSize               = (unsigned)JitConfig.JitObjectStackAllocationSize();
     m_trackFields                     = JitConfig.JitObjectStackAllocationTrackFields() > 0;
+}
+
+//------------------------------------------------------------------------
+// FindLoops: compute natural loops based on the current DFS tree.
+//
+// Returns:
+//   true if there are any loops
+//
+bool ObjectAllocator::FindLoops()
+{
+    if (m_loops != nullptr)
+    {
+        return m_loops->NumLoops() > 0;
+    }
+
+    if (comp->m_dfsTree == nullptr)
+    {
+        return false;
+    }
+
+    if (!comp->m_dfsTree->HasCycle())
+    {
+        // No cycles => no natural loops.
+        m_loops = nullptr;
+        return false;
+    }
+
+    m_loops = FlowGraphNaturalLoops::Find(comp->m_dfsTree);
+    return m_loops->NumLoops() > 0;
+}
+
+//------------------------------------------------------------------------
+// ComputeMayAliasSet: compute the set of indices that may refer to the same object
+// as the specified root index.
+//
+// Notes:
+//   The connection graph has edges from destination to source; for aliasing we
+//   conservatively take the undirected reachability closure.
+//
+BitVec ObjectAllocator::ComputeMayAliasSet(unsigned rootIndex)
+{
+    assert(m_AnalysisDone);
+    assert(rootIndex < m_bvCount);
+
+    BitVecTraits traits(m_bvCount, comp);
+    BitVec       aliases = BitVecOps::MakeEmpty(&traits);
+    BitVec       work    = BitVecOps::MakeEmpty(&traits);
+    BitVecOps::AddElemD(&traits, aliases, rootIndex);
+    BitVecOps::AddElemD(&traits, work, rootIndex);
+
+    // Precompute reverse adjacency
+    while (!BitVecOps::IsEmpty(&traits, work))
+    {
+        unsigned cur = 0;
+        {
+            BitVecOps::Iter it(&traits, work);
+            bool            ok = it.NextElem(&cur);
+            assert(ok);
+        }
+
+        BitVecOps::RemoveElemD(&traits, work, cur);
+
+        // Forward edges: cur -> X
+        if (m_ConnGraphAdjacencyMatrix[cur] != nullptr)
+        {
+            BitVecOps::Iter it(&traits, m_ConnGraphAdjacencyMatrix[cur]);
+            unsigned        next = 0;
+            while (it.NextElem(&next))
+            {
+                if (BitVecOps::TryAddElemD(&traits, aliases, next))
+                {
+                    BitVecOps::AddElemD(&traits, work, next);
+                }
+            }
+        }
+
+        // Reverse edges: Y -> cur
+        for (unsigned pred = 0; pred < m_bvCount; pred++)
+        {
+            BitVec const adj = m_ConnGraphAdjacencyMatrix[pred];
+            if (adj == nullptr)
+            {
+                continue;
+            }
+
+            if (BitVecOps::IsMember(&traits, adj, cur))
+            {
+                if (BitVecOps::TryAddElemD(&traits, aliases, pred))
+                {
+                    BitVecOps::AddElemD(&traits, work, pred);
+                }
+            }
+        }
+    }
+
+    // If unknown source is in the alias set, be conservative.
+    //
+    if (BitVecOps::IsMember(&traits, aliases, m_unknownSourceIndex))
+    {
+        return BitVecOps::MakeEmpty(&traits);
+    }
+
+    return aliases;
 }
 
 //------------------------------------------------------------------------
@@ -245,6 +349,686 @@ PhaseStatus ObjectAllocator::DoPhase()
     //
     comp->fgInvalidateDfsTree();
     return PhaseStatus::MODIFIED_EVERYTHING;
+}
+
+//------------------------------------------------------------------------
+// CanStackAllocInLoops: check if it is safe to stack allocate a candidate
+// local when the allocation site is within a natural loop.
+//
+// If the local is used or defined in the loop header, we assume it may be
+// live across the backedge.
+//
+// For loops that overlap EH regions, we additionally reject stack allocation
+// if we cannot confidently associate the loop with a try region (so we cannot
+// conservatively model handler reachability/use).
+//
+bool ObjectAllocator::CanStackAllocInLoops(unsigned lclNum, BasicBlock* allocBlock)
+{
+    assert(allocBlock != nullptr);
+
+    JITDUMP("\nLoop check for candidate V%02u in " FMT_BB "\n", lclNum, allocBlock->bbNum);
+
+    // If we don't have a DFS tree we can't identify natural loops.
+    //
+    if (comp->m_dfsTree == nullptr)
+    {
+        JITDUMP("  no DFS tree; skipping loop check\n");
+        return true;
+    }
+
+    if (!IsTrackedLocal(lclNum))
+    {
+        JITDUMP("  V%02u is not tracked; rejecting\n", lclNum);
+        return false;
+    }
+
+    if (!FindLoops())
+    {
+        JITDUMP("  no natural loops available; accepting\n");
+        return true;
+    }
+
+    const unsigned rootIndex = LocalToIndex(lclNum);
+    BitVec         aliases   = ComputeMayAliasSet(rootIndex);
+
+    BitVecTraits traits(m_bvCount, comp);
+    if (BitVecOps::IsEmpty(&traits, aliases))
+    {
+        JITDUMP("  alias set is empty (or unknown); rejecting\n");
+        return false;
+    }
+
+#ifdef DEBUG
+    JITDUMP("  aliases:");
+    BitVecOps::Iter iter(&traits, aliases);
+    unsigned        idx = 0;
+    while (iter.NextElem(&idx))
+    {
+        JITDUMPEXEC(DumpIndex(idx));
+    }
+    JITDUMP("\n");
+#endif
+
+    // For each loop containing allocBlock, reject if any alias can flow out of the
+    // loop (via normal exit) or can be carried across the loop backedge.
+    //
+    for (FlowGraphNaturalLoop* loop : m_loops->InReversePostOrder())
+    {
+        if (!loop->ContainsBlock(allocBlock))
+        {
+            continue;
+        }
+
+        BasicBlock* const header = loop->GetHeader();
+        if (header == nullptr)
+        {
+            continue;
+        }
+
+        JITDUMP("  considering loop " FMT_LP " header " FMT_BB "\n", loop->GetIndex(), header->bbNum);
+
+#ifdef DEBUG
+        JITDUMP("    loop members:");
+        loop->VisitLoopBlocks([&](BasicBlock* const b) {
+            JITDUMP(" " FMT_BB, b->bbNum);
+            return BasicBlockVisit::Continue;
+        });
+        JITDUMP("\n");
+#endif
+
+        // If the allocation is in the header, any backedge implies the stack object
+        // may be observable across iterations.
+        //
+        if (allocBlock == header)
+        {
+            JITDUMP("    allocation is in loop header; rejecting\n");
+            return false;
+        }
+
+        // Compute per-block use/def for indices in the alias set within this loop.
+        // use[b] = aliases used in b before any def of that alias in b.
+        // def[b] = aliases defined in b.
+        //
+        typedef JitHashTable<BasicBlock*, JitPtrKeyFuncs<BasicBlock>, BitVec> BlockToBitVecMap;
+        BlockToBitVecMap useMap(comp->getAllocator(CMK_ObjectAllocator));
+        BlockToBitVecMap defMap(comp->getAllocator(CMK_ObjectAllocator));
+
+        // For loops, address uses are conservatively treated as uses.
+        // If a local's address is used in the loop in a way that could be
+        // observed across iterations, we want to block stack allocation.
+
+        class LocalUseDefVisitor final : public GenTreeVisitor<LocalUseDefVisitor>
+        {
+            ObjectAllocator* m_allocator;
+            BitVecTraits*    m_traits;
+            BitVec           m_aliases;
+            BitVec*          m_use;
+            BitVec*          m_def;
+
+        public:
+            enum
+            {
+                DoPreOrder    = true,
+                DoLclVarsOnly = true,
+                ComputeStack  = false,
+            };
+
+            LocalUseDefVisitor(
+                ObjectAllocator* allocator, BitVecTraits* traits, BitVec aliases, BitVec* use, BitVec* def)
+                : GenTreeVisitor<LocalUseDefVisitor>(allocator->comp)
+                , m_allocator(allocator)
+                , m_traits(traits)
+                , m_aliases(aliases)
+                , m_use(use)
+                , m_def(def)
+            {
+            }
+
+            fgWalkResult PreOrderVisit(GenTree** use, GenTree* user)
+            {
+                GenTree* const node = *use;
+                assert(node->OperIsAnyLocal());
+
+                const unsigned nodeLclNum = node->AsLclVarCommon()->GetLclNum();
+                if (!m_allocator->IsTrackedLocal(nodeLclNum))
+                {
+                    return fgWalkResult::WALK_CONTINUE;
+                }
+
+                const unsigned nodeIndex = m_allocator->LocalToIndex(nodeLclNum);
+                if (!BitVecOps::IsMember(m_traits, m_aliases, nodeIndex))
+                {
+                    return fgWalkResult::WALK_CONTINUE;
+                }
+
+                if (node->OperIsLocalStore())
+                {
+                    BitVecOps::AddElemD(m_traits, *m_def, nodeIndex);
+                }
+                else
+                {
+                    const bool isAddrUse = node->OperIs(GT_LCL_ADDR);
+                    if (isAddrUse || !BitVecOps::IsMember(m_traits, *m_def, nodeIndex))
+                    {
+                        BitVecOps::AddElemD(m_traits, *m_use, nodeIndex);
+                    }
+                }
+
+                return fgWalkResult::WALK_CONTINUE;
+            }
+        };
+
+        loop->VisitLoopBlocks([&](BasicBlock* const block) {
+            BitVec use = BitVecOps::MakeEmpty(&traits);
+            BitVec def = BitVecOps::MakeEmpty(&traits);
+
+            for (Statement* const stmt : block->Statements())
+            {
+                LocalUseDefVisitor visitor(this, &traits, aliases, &use, &def);
+                visitor.WalkTree(stmt->GetRootNodePointer(), nullptr);
+            }
+
+            useMap.Set(block, use, BlockToBitVecMap::Overwrite);
+            defMap.Set(block, def, BlockToBitVecMap::Overwrite);
+
+#ifdef DEBUG
+            if (!BitVecOps::IsEmpty(&traits, use) || !BitVecOps::IsEmpty(&traits, def))
+            {
+                JITDUMP("    " FMT_BB "", block->bbNum);
+
+                if (!BitVecOps::IsEmpty(&traits, use))
+                {
+                    JITDUMP(" use:");
+                    BitVecOps::Iter iterUse(&traits, use);
+                    unsigned        idxUse = 0;
+                    while (iterUse.NextElem(&idxUse))
+                    {
+                        JITDUMPEXEC(DumpIndex(idxUse));
+                    }
+                }
+
+                if (!BitVecOps::IsEmpty(&traits, def))
+                {
+                    JITDUMP(" def:");
+                    BitVecOps::Iter iterDef(&traits, def);
+                    unsigned        idxDef = 0;
+                    while (iterDef.NextElem(&idxDef))
+                    {
+                        JITDUMPEXEC(DumpIndex(idxDef));
+                    }
+                }
+
+                JITDUMP("\n");
+            }
+#endif
+
+            return BasicBlockVisit::Continue;
+        });
+
+        // Backward dataflow within the loop:
+        // liveOut[b] = union of liveIn[s] over successors s within loop
+        // liveIn[b]  = use[b] U (liveOut[b] \ def[b])
+        //
+        // For regular control-flow exits, seed liveness based on how values are
+        // used in loop exit blocks.
+        //
+        BlockToBitVecMap liveInMap(comp->getAllocator(CMK_ObjectAllocator));
+        BlockToBitVecMap liveOutMap(comp->getAllocator(CMK_ObjectAllocator));
+
+        loop->VisitLoopBlocks([&](BasicBlock* const block) {
+            liveInMap.Set(block, BitVecOps::MakeEmpty(&traits), BlockToBitVecMap::Overwrite);
+            liveOutMap.Set(block, BitVecOps::MakeEmpty(&traits), BlockToBitVecMap::Overwrite);
+            return BasicBlockVisit::Continue;
+        });
+
+        // Seed liveOut for blocks that have exit edges, based on what is used in
+        // exit blocks. This captures the notion of values that can be observed
+        // after leaving the loop.
+        //
+        loop->VisitRegularExitBlocks([&](BasicBlock* exitBlock) {
+            JITDUMP("    exit " FMT_BB "\n", exitBlock->bbNum);
+            // Exit blocks may have been visited multiple times; union in their use.
+            //
+            BitVec exitUse = BitVecOps::MakeEmpty(&traits);
+            BitVec exitDef = BitVecOps::MakeEmpty(&traits);
+
+            for (Statement* const stmt : exitBlock->Statements())
+            {
+                LocalUseDefVisitor visitor(this, &traits, aliases, &exitUse, &exitDef);
+                visitor.WalkTree(stmt->GetRootNodePointer(), nullptr);
+            }
+
+#ifdef DEBUG
+            if (!BitVecOps::IsEmpty(&traits, exitUse))
+            {
+                JITDUMP("      exit uses:");
+                BitVecOps::Iter iter(&traits, exitUse);
+                unsigned        idx = 0;
+                while (iter.NextElem(&idx))
+                {
+                    JITDUMPEXEC(DumpIndex(idx));
+                }
+                JITDUMP("\n");
+            }
+#endif
+
+            // Values used in the exit block are conservatively live on all exit edges.
+            //
+            loop->VisitLoopBlocks([&](BasicBlock* const loopBlock) {
+                loopBlock->VisitRegularSuccs(comp, [&](BasicBlock* succ) {
+                    if (succ == exitBlock)
+                    {
+                        BitVec curOut = BitVecOps::UninitVal();
+                        bool   found  = liveOutMap.Lookup(loopBlock, &curOut);
+                        assert(found);
+
+                        BitVec newOut = BitVecOps::MakeCopy(&traits, curOut);
+                        BitVecOps::UnionD(&traits, newOut, exitUse);
+                        liveOutMap.Set(loopBlock, newOut, BlockToBitVecMap::Overwrite);
+                    }
+                    return BasicBlockVisit::Continue;
+                });
+
+                return BasicBlockVisit::Continue;
+            });
+
+            return BasicBlockVisit::Continue;
+        });
+
+        // If this loop overlaps any EH region, conservatively assume any alias
+        // used in a handler/filter block that may execute due to exceptions
+        // thrown from within the loop is observable on exceptional exit.
+        //
+        bool loopHasEHOverlap = false;
+        loop->VisitLoopBlocks([&](BasicBlock* const block) {
+            bool     inTry       = false;
+            unsigned regionIndex = comp->ehGetMostNestedRegionIndex(block, &inTry);
+            if (regionIndex != 0)
+            {
+                loopHasEHOverlap = true;
+                return BasicBlockVisit::Abort;
+            }
+            return BasicBlockVisit::Continue;
+        });
+
+        if (loopHasEHOverlap)
+        {
+            JITDUMP("    loop overlaps EH\n");
+
+            BitVec handlerUse = BitVecOps::MakeEmpty(&traits);
+            BitVec ehUse      = BitVecOps::MakeEmpty(&traits);
+
+            auto findOwningTryIndexForHnd = [&](unsigned hndIndex) -> unsigned {
+                assert(hndIndex > 0);
+                EHblkDsc* const hndEbd = comp->ehGetDsc(hndIndex - 1);
+
+                for (unsigned i = 0; i < comp->compHndBBtabCount; i++)
+                {
+                    EHblkDsc* const ebd = comp->ehGetDsc(i);
+
+                    if ((ebd->ebdHndBeg == hndEbd->ebdHndBeg) && (ebd->ebdHndLast == hndEbd->ebdHndLast))
+                    {
+                        return i + 1;
+                    }
+
+                    if (ebd->HasFilter() && (ebd->ebdFilter == hndEbd->ebdFilter) &&
+                        (ebd->ebdHndBeg == hndEbd->ebdHndBeg) && (ebd->ebdHndLast == hndEbd->ebdHndLast))
+                    {
+                        return i + 1;
+                    }
+                }
+
+                return 0;
+            };
+
+            auto unionUseFromBlock = [&](BasicBlock* const block, BitVec& into) {
+                for (Statement* const stmt : block->Statements())
+                {
+                    BitVec             tmpUse = BitVecOps::MakeEmpty(&traits);
+                    BitVec             tmpDef = BitVecOps::MakeEmpty(&traits);
+                    LocalUseDefVisitor visitor(this, &traits, aliases, &tmpUse, &tmpDef);
+                    visitor.WalkTree(stmt->GetRootNodePointer(), nullptr);
+                    BitVecOps::UnionD(&traits, into, tmpUse);
+                }
+            };
+
+            // Collect uses from handler blocks inside the loop.
+            loop->VisitLoopBlocks([&](BasicBlock* const block) {
+                if (block->hasHndIndex())
+                {
+                    unionUseFromBlock(block, handlerUse);
+                }
+                return BasicBlockVisit::Continue;
+            });
+
+#ifdef DEBUG
+            if (!BitVecOps::IsEmpty(&traits, handlerUse))
+            {
+                JITDUMP("    EH uses from handlers inside loop:");
+                BitVecOps::Iter iter(&traits, handlerUse);
+                unsigned        idx = 0;
+                while (iter.NextElem(&idx))
+                {
+                    JITDUMPEXEC(DumpIndex(idx));
+                }
+                JITDUMP("\n");
+            }
+#endif
+
+            // Also collect uses from handlers (and filters) that are reachable
+            // from try blocks inside the loop, even if handler blocks are
+            // outside the loop.
+            if (comp->compHndBBtabCount > 0)
+            {
+                BitVecTraits tryIndexTraits(comp->compHndBBtabCount, comp);
+                BitVec       tryIndicesToConsider = BitVecOps::MakeEmpty(&tryIndexTraits);
+
+#ifdef DEBUG
+                unsigned loopBlocksWithEH = 0;
+#endif
+
+                // Determine which try regions could throw to a handler while executing
+                // this loop. Any block in a try region can throw and transfer control
+                // to a handler.
+                //
+                // Include enclosing try regions as well.
+                loop->VisitLoopBlocks([&](BasicBlock* const block) {
+                    bool     inTry       = false;
+                    unsigned regionIndex = comp->ehGetMostNestedRegionIndex(block, &inTry);
+                    if (regionIndex == 0)
+                    {
+                        return BasicBlockVisit::Continue;
+                    }
+
+#ifdef DEBUG
+                    loopBlocksWithEH++;
+                    JITDUMP("      " FMT_BB " in EH#%u (%s)\n", block->bbNum, regionIndex - 1, inTry ? "try" : "hnd");
+#endif
+
+                    // Map the most-nested EH region to a try index.
+                    unsigned tryIndex = regionIndex;
+                    if (!inTry)
+                    {
+                        unsigned owningTryIndex = findOwningTryIndexForHnd(regionIndex);
+                        if (owningTryIndex == 0)
+                        {
+                            JITDUMP("      " FMT_BB " hnd EH#%u could not map to try\n", block->bbNum, regionIndex - 1);
+
+                            // Fall back to the handler index; this is conservative and still avoids
+                            // silently passing without seeding.
+                            owningTryIndex = regionIndex;
+                        }
+                        tryIndex = owningTryIndex;
+                    }
+
+                    BitVecTraits visitedTryTraits(comp->compHndBBtabCount, comp);
+                    BitVec       visitedTry = BitVecOps::MakeEmpty(&visitedTryTraits);
+                    while (tryIndex > 0)
+                    {
+                        // Guard against self-referential EH nesting.
+                        if (!BitVecOps::TryAddElemD(&visitedTryTraits, visitedTry, tryIndex - 1))
+                        {
+                            break;
+                        }
+
+                        if (!BitVecOps::IsMember(&tryIndexTraits, tryIndicesToConsider, tryIndex - 1))
+                        {
+                            BitVecOps::AddElemD(&tryIndexTraits, tryIndicesToConsider, tryIndex - 1);
+                        }
+
+                        EHblkDsc* const ebd = comp->ehGetDsc(tryIndex - 1);
+                        if (ebd->ebdEnclosingTryIndex == EHblkDsc::NO_ENCLOSING_INDEX)
+                        {
+                            break;
+                        }
+
+                        if (ebd->ebdEnclosingTryIndex == tryIndex)
+                        {
+                            break;
+                        }
+
+                        tryIndex = ebd->ebdEnclosingTryIndex;
+                    }
+
+                    return BasicBlockVisit::Continue;
+                });
+
+#ifdef DEBUG
+                if (loopBlocksWithEH > 0)
+                {
+                    JITDUMP("    EH map: %u loop blocks in EH\n", loopBlocksWithEH);
+                }
+
+                if (!BitVecOps::IsEmpty(&tryIndexTraits, tryIndicesToConsider))
+                {
+                    JITDUMP("    try regions considered:");
+                    BitVecOps::Iter itDbg(&tryIndexTraits, tryIndicesToConsider);
+                    unsigned        tryIndex = 0;
+                    while (itDbg.NextElem(&tryIndex))
+                    {
+                        JITDUMP(" #%u", tryIndex);
+                    }
+                    JITDUMP("\n");
+                }
+#endif
+
+                if (BitVecOps::IsEmpty(&tryIndexTraits, tryIndicesToConsider))
+                {
+                    JITDUMP("    loop overlaps EH but could not identify try region; rejecting\n");
+                    return false;
+                }
+
+                BitVecOps::Iter it(&tryIndexTraits, tryIndicesToConsider);
+                unsigned        tryIndex = 0;
+                while (it.NextElem(&tryIndex))
+                {
+                    EHblkDsc* const ebd = comp->ehGetDsc(tryIndex);
+
+                    BitVecOps::ClearD(&traits, ehUse);
+
+                    // Process handler blocks
+                    for (BasicBlock* block = ebd->ebdHndBeg; block != nullptr; block = block->Next())
+                    {
+                        unionUseFromBlock(block, ehUse);
+                        if (block == ebd->ebdHndLast)
+                        {
+                            break;
+                        }
+                    }
+
+                    // Process filter blocks
+                    if (ebd->HasFilter())
+                    {
+                        for (BasicBlock* block = ebd->ebdFilter; block != nullptr; block = block->Next())
+                        {
+                            unionUseFromBlock(block, ehUse);
+                            if (block == ebd->ebdHndBeg)
+                            {
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!BitVecOps::IsEmpty(&traits, ehUse))
+                    {
+                        BitVecOps::UnionD(&traits, handlerUse, ehUse);
+                    }
+                    else
+                    {
+                        JITDUMP("    EH handler/filter for try #%u has no alias uses\n", tryIndex);
+                    }
+                }
+
+#ifdef DEBUG
+                const unsigned aliasCount = BitVecOps::Count(&traits, aliases);
+                JITDUMP("    EH scan complete (aliases=%u)\n", aliasCount);
+
+                if (BitVecOps::IsEmpty(&traits, handlerUse))
+                {
+                    JITDUMP("    EH handler/filter contributed no alias uses\n");
+                }
+#endif
+
+                // We do not have precise modeling of exceptional control flow or all
+                // potential ways a handler might observe an object. Even if  we do not
+                // see direct alias local uses in the handler/filter IR, it may still
+                // observe a loop-carried stack object through unmodelled paths.
+                //
+                // Be conservative here...
+                if (BitVecOps::IsEmpty(&traits, handlerUse))
+                {
+                    JITDUMP(
+                        "    loop overlaps EH; handler/filter does not reference aliases; rejecting conservatively\n");
+                    return false;
+                }
+            }
+
+            if (!BitVecOps::IsEmpty(&traits, handlerUse))
+            {
+#ifdef DEBUG
+                JITDUMP("    EH handler/filter uses:");
+                BitVecOps::Iter iter(&traits, handlerUse);
+                unsigned        idx = 0;
+                while (iter.NextElem(&idx))
+                {
+                    JITDUMPEXEC(DumpIndex(idx));
+                }
+                JITDUMP("\n");
+#endif
+
+                // Conservatively treat handler/filter uses as observable on
+                // exceptional exit from anywhere in the loop's try region.
+                // Seed live-out for all loop blocks, not just backedge sources.
+                loop->VisitLoopBlocks([&](BasicBlock* const loopBlock) {
+                    BitVec curOut{BitVecOps::UninitVal()};
+                    bool   found = liveOutMap.Lookup(loopBlock, &curOut);
+                    assert(found);
+
+                    BitVec newOut = BitVecOps::MakeCopy(&traits, curOut);
+                    BitVecOps::UnionD(&traits, newOut, handlerUse);
+                    liveOutMap.Set(loopBlock, newOut, BlockToBitVecMap::Overwrite);
+                    return BasicBlockVisit::Continue;
+                });
+            }
+        }
+
+        bool     changed   = true;
+        unsigned iterCount = 0;
+        while (changed)
+        {
+            changed = false;
+            iterCount++;
+            loop->VisitLoopBlocks([&](BasicBlock* const block) {
+                BitVec liveOut = BitVecOps::MakeEmpty(&traits);
+
+                // Start with seeded live-out information for exit edges.
+                BitVec seededOut = BitVecOps::UninitVal();
+                bool   foundSeed = liveOutMap.Lookup(block, &seededOut);
+                assert(foundSeed);
+                BitVecOps::UnionD(&traits, liveOut, seededOut);
+
+                // Normal successors within the loop.
+                block->VisitRegularSuccs(comp, [&](BasicBlock* succ) {
+                    if (!loop->ContainsBlock(succ))
+                    {
+                        return BasicBlockVisit::Continue;
+                    }
+
+                    BitVec succIn = BitVecOps::UninitVal();
+                    bool   found  = liveInMap.Lookup(succ, &succIn);
+                    assert(found);
+                    BitVecOps::UnionD(&traits, liveOut, succIn);
+                    return BasicBlockVisit::Continue;
+                });
+
+                BitVec oldOut   = BitVecOps::UninitVal();
+                bool   foundOut = liveOutMap.Lookup(block, &oldOut);
+                assert(foundOut);
+                if (!BitVecOps::Equal(&traits, oldOut, liveOut))
+                {
+                    liveOutMap.Set(block, BitVecOps::MakeCopy(&traits, liveOut), BlockToBitVecMap::Overwrite);
+                    changed = true;
+                }
+
+                BitVec use      = BitVecOps::UninitVal();
+                BitVec def      = BitVecOps::UninitVal();
+                bool   foundUse = useMap.Lookup(block, &use);
+                bool   foundDef = defMap.Lookup(block, &def);
+                assert(foundUse && foundDef);
+
+                BitVec in = BitVecOps::MakeCopy(&traits, liveOut);
+                BitVecOps::DiffD(&traits, in, def);
+                BitVecOps::UnionD(&traits, in, use);
+
+                BitVec oldIn   = BitVecOps::UninitVal();
+                bool   foundIn = liveInMap.Lookup(block, &oldIn);
+                assert(foundIn);
+                if (!BitVecOps::Equal(&traits, oldIn, in))
+                {
+                    liveInMap.Set(block, BitVecOps::MakeCopy(&traits, in), BlockToBitVecMap::Overwrite);
+                    changed = true;
+                }
+                return BasicBlockVisit::Continue;
+            });
+        }
+
+        JITDUMP("    loop dataflow converged in %u iteration(s)\n", iterCount);
+
+        // If anything in aliases is live-in at the loop header, it means it can be
+        // needed for a subsequent iteration (loop-carried) or used before def.
+        //
+        BitVec headerIn      = BitVecOps::UninitVal();
+        bool   foundHeaderIn = liveInMap.Lookup(header, &headerIn);
+        assert(foundHeaderIn);
+        if (!BitVecOps::IsEmptyIntersection(&traits, headerIn, aliases))
+        {
+            JITDUMP("    aliases live-in at header; rejecting\n");
+
+#ifdef DEBUG
+            JITDUMP("      header live-in:");
+            BitVecOps::Iter iter(&traits, headerIn);
+            unsigned        idx = 0;
+            while (iter.NextElem(&idx))
+            {
+                JITDUMPEXEC(DumpIndex(idx));
+            }
+            JITDUMP("\n");
+#endif
+            return false;
+        }
+
+        // Also reject if any backedge source has aliases live-out across the backedge.
+        //
+        for (FlowEdge* const backEdge : loop->BackEdges())
+        {
+            BasicBlock* const src         = backEdge->getSourceBlock();
+            BitVec            srcOut      = BitVecOps::UninitVal();
+            bool              foundSrcOut = liveOutMap.Lookup(src, &srcOut);
+            assert(foundSrcOut);
+            if (!BitVecOps::IsEmptyIntersection(&traits, srcOut, aliases))
+            {
+                JITDUMP("    aliases live-out on backedge " FMT_BB " -> " FMT_BB "; rejecting\n", src->bbNum,
+                        header->bbNum);
+
+#ifdef DEBUG
+                JITDUMP("      backedge live-out:");
+                BitVecOps::Iter it(&traits, srcOut);
+                unsigned        idx = 0;
+                while (it.NextElem(&idx))
+                {
+                    JITDUMPEXEC(DumpIndex(idx));
+                }
+                JITDUMP("\n");
+#endif
+                return false;
+            }
+        }
+
+        JITDUMP("    loop passed\n");
+    }
+
+    JITDUMP("  all containing loops passed; accepting\n");
+    return true;
 }
 
 //------------------------------------------------------------------------------
@@ -1368,12 +2152,17 @@ bool ObjectAllocator::MorphAllocObjNodeHelper(AllocationCandidate& candidate)
         return false;
     }
 
-    // Don't attempt to do stack allocations inside basic blocks that may be in a loop.
-    //
     if (candidate.m_block->HasFlag(BBF_BACKWARD_JUMP))
     {
-        candidate.m_onHeapReason = "[alloc in loop]";
-        return false;
+        // Stack allocation inside loops needs additional requirements: we must
+        // avoid loop-carried references. If the candidate local is referenced in the
+        // header of any natural loop that contains the allocation, we assume it may
+        // be live across the backedge.
+        if (!CanStackAllocInLoops(candidate.m_lclNum, candidate.m_block))
+        {
+            candidate.m_onHeapReason = "[loop-carried local]";
+            return false;
+        }
     }
 
     // Don't stack allocate at sites that were cloned or are clones. These sites now violate
@@ -3829,18 +4618,6 @@ bool ObjectAllocator::CheckCanClone(CloneInfo* info)
     assert(!info->m_checkedCanClone);
     JITDUMP("** Seeing if we can clone to guarantee non-escape under V%02u\n", info->m_local);
     BasicBlock* const allocBlock = info->m_allocBlock;
-
-    // The allocation site must not be in a loop (stack allocation limitation)
-    //
-    // Note if we can prove non-escape but can't stack allocate, we might be
-    // able to light up an "object is thread exclusive" mode and effectively
-    // promote the fields anyways.
-    //
-    if (allocBlock->HasFlag(BBF_BACKWARD_JUMP))
-    {
-        JITDUMP("allocation block " FMT_BB " is (possibly) in a loop\n", allocBlock->bbNum);
-        return false;
-    }
 
     // Heuristic: if the allocation block was not profiled, or is hit less than 10% of
     // the time this method is called, bail... (note we should really look at weight of uses,

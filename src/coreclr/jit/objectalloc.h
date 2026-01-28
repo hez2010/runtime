@@ -198,6 +198,9 @@ class ObjectAllocator final : public Phase
     // Info to distinguish cloned blocks
     unsigned m_initialMaxBlockID;
 
+    // Loop analysis cache (computed lazily as needed)
+    FlowGraphNaturalLoops* m_loops;
+
     //===============================================================================
     // Methods
 public:
@@ -234,6 +237,9 @@ private:
     bool         DoesIndexPointToStack(unsigned int index);
     void         PrepareAnalysis();
     void         DoAnalysis();
+    BitVec       ComputeMayAliasSet(unsigned rootIndex);
+    bool         FindLoops();
+    bool         CanStackAllocInLoops(unsigned lclNum, BasicBlock* allocBlock);
     void         MarkLclVarAsEscaping(unsigned int lclNum);
     void         MarkIndexAsEscaping(unsigned int lclNum);
     void         MarkEscapingVarsAndBuildConnGraph();

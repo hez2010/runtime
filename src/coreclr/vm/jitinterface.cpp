@@ -8859,8 +8859,18 @@ bool CEEInfo::resolveVirtualMethodHelper(CORINFO_DEVIRTUALIZATION_INFO * info)
             pPrimaryMD, pExactMT, pExactMT->IsValueType() && !pPrimaryMD->IsStatic(), pBaseMD->GetMethodInstantiation(), true);
         if (pDevirtMD->IsSharedByGenericMethodInstantiations())
         {
-            info->detail = CORINFO_DEVIRTUALIZATION_FAILED_CANON;
-            return false;
+            pDevirtMD = MethodDesc::FindOrCreateAssociatedMethodDesc(
+                pPrimaryMD, pExactMT, pExactMT->IsValueType() && !pPrimaryMD->IsStatic(), pBaseMD->GetMethodInstantiation(), false);
+
+            const bool requiresRuntimeLookup =
+                TypeHandle::IsCanonicalSubtypeInstantiation(pDevirtMD->GetClassInstantiation()) ||
+                TypeHandle::IsCanonicalSubtypeInstantiation(pDevirtMD->GetMethodInstantiation());
+
+            if (requiresRuntimeLookup)
+            {
+                info->detail = CORINFO_DEVIRTUALIZATION_FAILED_CANON;
+                return false;
+            }
         }
 
         isGenericVirtual = true;

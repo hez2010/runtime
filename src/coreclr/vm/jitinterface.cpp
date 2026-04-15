@@ -3209,11 +3209,19 @@ NoSpecialCase:
         FALLTHROUGH;
 
     case MethodDescSlot:
+    case DevirtualizedMethodDescSlot:
     case MethodEntrySlot:
     case DispatchStubAddrSlot:
         {
             // Encode containing type
-            if (pResolvedToken->pTypeSpec != NULL)
+            if (entryKind == DevirtualizedMethodDescSlot)
+            {
+                // For shared GVM devirtualization use the devirtualized method owner type from pTemplateMD.
+                _ASSERTE(pTemplateMD != NULL);
+                sigBuilder.AppendElementType(ELEMENT_TYPE_INTERNAL);
+                sigBuilder.AppendPointer(pTemplateMD->GetMethodTable());
+            }
+            else if (pResolvedToken->pTypeSpec != NULL)
             {
                 SigPointer sigptr(pResolvedToken->pTypeSpec, pResolvedToken->cbTypeSpec);
                 sigptr.ConvertToInternalExactlyOne(pModule, NULL, &sigBuilder);
@@ -8862,14 +8870,29 @@ bool CEEInfo::resolveVirtualMethodHelper(CORINFO_DEVIRTUALIZATION_INFO * info)
             pDevirtMD = MethodDesc::FindOrCreateAssociatedMethodDesc(
                 pPrimaryMD, pExactMT, pExactMT->IsValueType() && !pPrimaryMD->IsStatic(), pBaseMD->GetMethodInstantiation(), false);
 
-            const bool requiresRuntimeLookup =
-                TypeHandle::IsCanonicalSubtypeInstantiation(pDevirtMD->GetClassInstantiation()) ||
-                TypeHandle::IsCanonicalSubtypeInstantiation(pDevirtMD->GetMethodInstantiation());
-
-            if (requiresRuntimeLookup)
+            if (TypeHandle::IsCanonicalSubtypeInstantiation(pDevirtMD->GetClassInstantiation()))
             {
+                // If we end up with a shared MethodTable that is not exact,
+                // we can't devirtualize since it's not possible to compute the instantiation argument as a runtime lookup.
                 info->detail = CORINFO_DEVIRTUALIZATION_FAILED_CANON;
                 return false;
+            }
+
+            const bool requiresRuntimeLookup = TypeHandle::IsCanonicalSubtypeInstantiation(pDevirtMD->GetMethodInstantiation());
+            if (requiresRuntimeLookup)
+            {
+                if (info->pResolvedTokenVirtualMethod == nullptr)
+                {
+                    info->detail = CORINFO_DEVIRTUALIZATION_FAILED_CANON;
+                    return false;
+                }
+
+                ComputeRuntimeLookupForSharedGenericToken(DevirtualizedMethodDescSlot,
+                                                          info->pResolvedTokenVirtualMethod,
+                                                          nullptr,
+                                                          pDevirtMD,
+                                                          m_pMethodBeingCompiled,
+                                                          &info->instParamLookup);
             }
         }
 

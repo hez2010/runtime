@@ -1288,6 +1288,7 @@ DONE:
             info->methodHnd                            = callInfo->hMethod;
             info->exactContextHnd                      = exactContextHnd;
             info->ilLocation                           = impCurStmtDI.GetLocation();
+            info->resolvedToken                        = *pResolvedToken;
             call->AsCall()->gtLateDevirtualizationInfo = info;
         }
     }

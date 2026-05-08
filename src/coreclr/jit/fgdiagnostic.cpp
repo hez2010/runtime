@@ -980,6 +980,10 @@ bool Compiler::fgDumpFlowGraph(Phases phase, PhasePosition pos)
             {
                 fprintf(fgxFile, "\n            callsNew=\"true\"");
             }
+            if (block->HasFlag(BBF_HAS_NEWSTR))
+            {
+                fprintf(fgxFile, "\n            callsFastAllocateString=\"true\"");
+            }
 
             const char* rootTreeOpName = "n/a";
             if (block->IsLIR() || (block->lastStmt() != nullptr))

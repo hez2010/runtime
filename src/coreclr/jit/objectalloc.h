@@ -135,7 +135,8 @@ class ObjectAllocator final : public Phase
         OAT_NONE,
         OAT_NEWOBJ,
         OAT_NEWOBJ_HEAP,
-        OAT_NEWARR
+        OAT_NEWARR,
+        OAT_NEWSTR
     };
 
     struct AllocationCandidate
@@ -244,6 +245,7 @@ private:
     bool         MorphAllocObjNodes();
     void         MorphAllocObjNode(AllocationCandidate& candidate);
     bool         MorphAllocObjNodeHelper(AllocationCandidate& candidate);
+    bool         MorphAllocObjNodeHelperStr(AllocationCandidate& candidate);
     bool         MorphAllocObjNodeHelperArr(AllocationCandidate& candidate);
     bool         MorphAllocObjNodeHelperObj(AllocationCandidate& candidate);
     void         RewriteUses();
@@ -258,6 +260,9 @@ private:
                                                unsigned int         blockSize,
                                                BasicBlock*          block,
                                                Statement*           stmt);
+    unsigned int MorphNewStrNodeIntoStackAlloc(GenTreeCall* newStr,
+                                               BasicBlock*  block,
+                                               Statement*   stmt);
     struct BuildConnGraphVisitorCallbackData;
     void AnalyzeParentStack(ArrayStack<GenTree*>* parentStack, unsigned int lclNum, BasicBlock* block);
     void UpdateAncestorTypes(

@@ -2044,6 +2044,7 @@ DiscretionaryPolicy::DiscretionaryPolicy(Compiler* compiler, bool isPrejitRoot)
     , m_IsSameThis(false)
     , m_CallerHasNewArray(false)
     , m_CallerHasNewObj(false)
+    , m_CallerHasNewStr(false)
     , m_CalleeHasGCStruct(false)
 {
     // Empty
@@ -2075,6 +2076,10 @@ void DiscretionaryPolicy::NoteBool(InlineObservation obs, bool value)
 
         case InlineObservation::CALLER_HAS_NEWOBJ:
             m_CallerHasNewObj = value;
+            break;
+
+        case InlineObservation::CALLER_HAS_NEWSTR:
+            m_CallerHasNewStr = value;
             break;
 
         case InlineObservation::CALLEE_HAS_GC_STRUCT:
@@ -2841,6 +2846,7 @@ void DiscretionaryPolicy::DumpData(FILE* file) const
     fprintf(file, ",%u", m_IsSameThis ? 1 : 0);
     fprintf(file, ",%u", m_CallerHasNewArray ? 1 : 0);
     fprintf(file, ",%u", m_CallerHasNewObj ? 1 : 0);
+    fprintf(file, ",%u", m_CallerHasNewStr ? 1 : 0);
     fprintf(file, ",%u", m_IsNoReturn ? 1 : 0);
     fprintf(file, ",%u", m_CalleeHasGCStruct ? 1 : 0);
     fprintf(file, ",%u", m_CallsiteDepth);

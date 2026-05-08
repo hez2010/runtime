@@ -178,6 +178,7 @@ namespace System
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static string Concat(string? str0, string? str1)
         {
             if (IsNullOrEmpty(str0))

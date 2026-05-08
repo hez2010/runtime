@@ -25,7 +25,7 @@ XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 //    comp - compiler instance
 //
 // Notes:
-//    Runs only if Compiler::optMethodFlags has flag OMF_HAS_NEWOBJ or OMF_HAS_NEWARR.
+//    Runs only if Compiler::optMethodFlags has flag OMF_HAS_NEWOBJ or OMF_HAS_NEWARR or OMF_HAS_NEWSTR.
 //
 //    Builds a connection graph where nodes mostly represent gc typed local vars,
 //    showing how these locals can assign values to one another.
@@ -182,13 +182,14 @@ void ObjectAllocator::DumpIndex(unsigned bvIndex)
 //    PhaseStatus indicating, what, if anything, was modified
 //
 // Notes:
-//    Runs only if Compiler::optMethodFlags has flag OMF_HAS_NEWOBJ set.
+//    Runs only if Compiler::optMethodFlags has flag OMF_HAS_NEWOBJ or OMF_HAS_NEWARR or OMF_HAS_NEWSTR.
 //
 PhaseStatus ObjectAllocator::DoPhase()
 {
-    if ((m_compiler->optMethodFlags & OMF_HAS_NEWOBJ) == 0 && (m_compiler->optMethodFlags & OMF_HAS_NEWARRAY) == 0)
+    if ((m_compiler->optMethodFlags & OMF_HAS_NEWOBJ) == 0 && (m_compiler->optMethodFlags & OMF_HAS_NEWARRAY) == 0 &&
+        (m_compiler->optMethodFlags & OMF_HAS_NEWSTR) == 0)
     {
-        JITDUMP("no newobjs or newarr in this method; punting\n");
+        JITDUMP("no newobjs or newarr or newstr in this method; punting\n");
         m_compiler->fgInvalidateDfsTree();
         return PhaseStatus::MODIFIED_NOTHING;
     }
@@ -1118,7 +1119,7 @@ bool ObjectAllocator::CanAllocateLclVarOnStack(unsigned int         lclNum,
         ClassLayout* const layout = m_compiler->typGetArrayLayout(clsHnd, (unsigned)length);
         classSize                 = layout->GetSize();
     }
-    else if (allocType == OAT_NEWOBJ)
+    else if (allocType == OAT_NEWOBJ || allocType == OAT_NEWSTR)
     {
         if (m_compiler->info.compCompHnd->isValueClass(clsHnd))
         {
@@ -1139,7 +1140,8 @@ bool ObjectAllocator::CanAllocateLclVarOnStack(unsigned int         lclNum,
             }
 
             assert(m_compiler->info.compCompHnd->canAllocateOnStack(clsHnd));
-            classSize = m_compiler->info.compCompHnd->getHeapClassSize(clsHnd);
+            classSize = allocType == OAT_NEWSTR ? m_compiler->info.compCompHnd->getClassSize(clsHnd)
+                                                : m_compiler->info.compCompHnd->getHeapClassSize(clsHnd);
         }
     }
     else
@@ -1219,6 +1221,14 @@ ObjectAllocator::ObjectAllocationType ObjectAllocator::AllocationKind(GenTree* t
             }
         }
     }
+    else if (tree->IsCall())
+    {
+        GenTreeCall* const call = tree->AsCall();
+        if (call->IsSpecialIntrinsic(m_compiler, NI_System_String_FastAllocateString))
+        {
+            allocType = OAT_NEWSTR;
+        }
+    }
 
     return allocType;
 }
@@ -1243,9 +1253,10 @@ bool ObjectAllocator::MorphAllocObjNodes()
     {
         const bool basicBlockHasNewObj       = block->HasFlag(BBF_HAS_NEWOBJ);
         const bool basicBlockHasNewArr       = block->HasFlag(BBF_HAS_NEWARR);
+        const bool basicBlockHasNewStr       = block->HasFlag(BBF_HAS_NEWSTR);
         const bool basicBlockHasBackwardJump = block->HasFlag(BBF_BACKWARD_JUMP);
 
-        if (!basicBlockHasNewObj && !basicBlockHasNewArr)
+        if (!basicBlockHasNewObj && !basicBlockHasNewArr && !basicBlockHasNewStr)
         {
             continue;
         }
@@ -1450,9 +1461,61 @@ bool ObjectAllocator::MorphAllocObjNodeHelper(AllocationCandidate& candidate)
         case OAT_NEWOBJ_HEAP:
             candidate.m_onHeapReason = "[runtime disallows]";
             return false;
+        case OAT_NEWSTR:
+            return MorphAllocObjNodeHelperStr(candidate);
         default:
             unreached();
     }
+}
+
+//------------------------------------------------------------------------
+// MorphAllocObjNodeHelperStr: See if we can stack allocate a string
+//
+// Arguments:
+//    candidate -- allocation candidate
+//
+// Return Value:
+//    True if candidate was stack allocated
+//    If false, candidate reason is updated to explain why not
+//
+bool ObjectAllocator::MorphAllocObjNodeHelperStr(AllocationCandidate& candidate)
+{
+    assert(candidate.m_block->HasFlag(BBF_HAS_NEWSTR));
+    GenTree* const data = candidate.m_tree->AsLclVar()->Data();
+
+    //------------------------------------------------------------------------
+    // We expect the following expression tree at this point
+    //  STMTx (IL 0x... ???)
+    //    * STORE_LCL_VAR   ref
+    //    \--*  CALL FastAllocateString  ref
+    //       +--*  ??? long
+    //       \--*  ??? long
+    //------------------------------------------------------------------------
+
+    CORINFO_CLASS_HANDLE clsHnd = m_compiler->info.compCompHnd->getBuiltinClass(CLASSID_STRING);
+    GenTree* const len = data->AsCall()->gtArgs.GetUserArgByIndex(1)->GetNode();
+
+    assert(len != nullptr);
+    m_compiler->Metrics.NewFastAllocateStringCalls++;
+
+    if (!CanAllocateLclVarOnStack(candidate.m_lclNum, clsHnd, candidate.m_allocType, 0, nullptr,
+                                  &candidate.m_onHeapReason))
+    {
+        // reason set by the call
+        return false;
+    }
+
+    JITDUMP("Allocating V%02u on the stack\n", candidate.m_lclNum);
+
+    const unsigned int stackLclNum =
+        MorphNewStrNodeIntoStackAlloc(data->AsCall(), candidate.m_block, candidate.m_statement);
+
+    // Keep track of this new local for later type updates.
+    //
+    m_HeapLocalToStackArrLocalMap.AddOrUpdate(candidate.m_lclNum, stackLclNum);
+    m_compiler->Metrics.StackAllocatedStrings++;
+
+    return true;
 }
 
 //------------------------------------------------------------------------
@@ -1869,6 +1932,39 @@ unsigned int ObjectAllocator::MorphAllocObjNodeIntoStackAlloc(GenTreeAllocObj* a
     {
         JITDUMP("ALLOCOBJ [%06u] is not part of an empty static\n", m_compiler->dspTreeID(allocObj));
     }
+
+    return lclNum;
+}
+
+//------------------------------------------------------------------------
+// MorphNewStrNodeIntoStackAlloc: Morph a GT_CALL FastAllocateString node into stack
+//                                allocation.
+// Arguments:
+//    newStr       - GT_CALL that will be replaced by a stack allocation
+//    block        - a basic block where newStr is
+//    stmt         - a statement where newStr is
+//
+// Return Value:
+//    local num for the new stack allocated local
+//
+// Notes:
+//    This function can insert additional statements before stmt.
+//
+unsigned int ObjectAllocator::MorphNewStrNodeIntoStackAlloc(GenTreeCall* newStr,
+                                                            BasicBlock*  block,
+                                                            Statement*   stmt)
+{
+    assert(newStr != nullptr);
+    assert(m_AnalysisDone);
+
+#ifdef DEBUG
+    const char* lclName = m_compiler->printfAlloc("stack allocated string");
+#endif
+
+    const bool         shortLifetime = false;
+    const unsigned int lclNum        = m_compiler->lvaGrabTemp(shortLifetime DEBUGARG(lclName));
+
+    // TODO
 
     return lclNum;
 }

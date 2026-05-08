@@ -12991,6 +12991,11 @@ void Compiler::impMakeDiscretionaryInlineObservations(InlineInfo* pInlineInfo, I
         inlineResult->Note(InlineObservation::CALLER_HAS_NEWARRAY);
     }
 
+    if ((rootCompiler->optMethodFlags & OMF_HAS_NEWSTR) != 0)
+    {
+        inlineResult->Note(InlineObservation::CALLER_HAS_NEWSTR);
+    }
+
     if ((rootCompiler->optMethodFlags & OMF_HAS_NEWOBJ) != 0)
     {
         inlineResult->Note(InlineObservation::CALLER_HAS_NEWOBJ);

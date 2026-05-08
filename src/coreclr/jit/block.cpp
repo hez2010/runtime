@@ -503,6 +503,7 @@ void BasicBlock::dspFlags() const
         {BBF_GC_SAFE_POINT, "gcsafe"},
         {BBF_HAS_NEWOBJ, "newobj"},
         {BBF_HAS_NEWARR, "newarr"},
+        {BBF_HAS_NEWSTR, "newstr"},
         {BBF_BACKWARD_JUMP, "bwd"},
         {BBF_BACKWARD_JUMP_TARGET, "bwd-target"},
         {BBF_BACKWARD_JUMP_SOURCE, "bwd-src"},

@@ -384,6 +384,7 @@ protected:
     bool        m_IsSameThis;
     bool        m_CallerHasNewArray;
     bool        m_CallerHasNewObj;
+    bool        m_CallerHasNewStr;
     bool        m_CalleeHasGCStruct;
 };
 

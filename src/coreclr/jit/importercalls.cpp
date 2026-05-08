@@ -100,6 +100,8 @@ var_types Compiler::impImportCall(OPCODE                  opcode,
     GenTree*         instParam         = nullptr;
     GenTree*         asyncContinuation = nullptr;
 
+    NamedIntrinsic ni = NI_Illegal;
+
     // Swift calls that might throw use a SwiftError* arg that requires additional IR to handle,
     // so if we're importing a Swift call, look for this type in the signature
     GenTree* swiftErrorNode = nullptr;
@@ -142,8 +144,6 @@ var_types Compiler::impImportCall(OPCODE                  opcode,
     }
     else // (opcode != CEE_CALLI)
     {
-        NamedIntrinsic ni = NI_Illegal;
-
         // Passing CORINFO_CALLINFO_ALLOWINSTPARAM indicates that this JIT is prepared to
         // supply the instantiation parameters necessary to make direct calls to underlying
         // shared generic code, rather than calling through instantiating stubs.  If the
@@ -1565,6 +1565,27 @@ DONE_CALL:
             {
                 call = gtNewCastNode(genActualType(callRetTyp), call, false, callRetTyp);
             }
+        }
+
+        if (opts.OptimizationEnabled() && (ni == NI_System_String_FastAllocateString))
+        {
+            // We assign the newly allocated string (by a GT_CALL node)
+            // to a temp. Note that the pattern "temp = CALL FastAllocateString" is required
+            // by ObjectAllocator phase to be able to determine string alloc nodes
+            // without exhaustive walk over all expressions.
+            unsigned lclNum = lvaGrabTemp(true DEBUGARG("FastAllocateString temp"));
+            impStoreToTemp(lclNum, call, CHECK_SPILL_ALL);
+
+            assert(lvaTable[lclNum].lvSingleDef == 0);
+            lvaTable[lclNum].lvSingleDef = 1;
+            JITDUMP("Marked V%02u as a single def local\n", lclNum);
+            lvaSetClass(lclNum, retTypeClass, true /* is Exact */);
+
+            call = gtNewLclvNode(lclNum, TYP_REF);
+
+            // Remember that this function contains 'new' of a string.
+            optMethodFlags |= OMF_HAS_NEWSTR;
+            compCurBB->SetFlags(BBF_HAS_NEWSTR);
         }
 
         typeInfo tiRetVal = makeTypeInfo(sig->retType, retTypeClass);

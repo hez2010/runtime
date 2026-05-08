@@ -124,6 +124,7 @@ INLINE_OBSERVATION(ASYNC_USED_CONTINUATION,   bool,   "uses AsyncCallContinuatio
 
 INLINE_OBSERVATION(HAS_NEWARRAY,              bool,   "has newarray",                         INFORMATION, CALLER)
 INLINE_OBSERVATION(HAS_NEWOBJ,                bool,   "has newobj",                           INFORMATION, CALLER)
+INLINE_OBSERVATION(HAS_NEWSTR,                bool,   "has newstr",                           INFORMATION, CALLER)
 
 // ------ Call Site Correctness -------
 

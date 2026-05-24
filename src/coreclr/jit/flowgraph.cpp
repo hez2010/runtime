@@ -6732,6 +6732,7 @@ bool FlowGraphNaturalLoop::IsPostDominatedOnLoopIteration(BasicBlock* block, Bas
 int NaturalLoopIterInfo::IterConst()
 {
     GenTree* value = IterTree->AsLclVar()->Data();
+    assert(value->OperIsBinary());
     return (int)value->gtGetOp2()->AsIntCon()->IconValue();
 }
 

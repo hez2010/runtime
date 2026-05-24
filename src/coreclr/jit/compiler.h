@@ -7530,8 +7530,13 @@ public:
     PhaseStatus optRangeCheckCloning();
     void optCloneLoop(FlowGraphNaturalLoop* loop, LoopCloneContext* context);
     PhaseStatus optUnrollLoops(); // Unrolls loops (needs to have cost info)
-    bool optTryUnrollLoop(FlowGraphNaturalLoop* loop, bool* changedIR);
-    void optRedirectPrevUnrollIteration(FlowGraphNaturalLoop* loop, BasicBlock* prevTestBlock, BasicBlock* target);
+    bool optTryUnrollLoop(FlowGraphNaturalLoop* loop, bool* changedIR, bool* madePartialUnroll);
+    void optRedirectPrevUnrollIteration(FlowGraphNaturalLoop* loop,
+                                        BasicBlock*           prevTestBlock,
+                                        BasicBlock*           target,
+                                        BasicBlock*           exit,
+                                        bool                  removeTest);
+    GenTree* optCreateLoopUnrollGuardCondition(NaturalLoopIterInfo* iterInfo, unsigned unrollCount);
     void optReplaceScalarUsesWithConst(BasicBlock* block, unsigned lclNum, ssize_t cnsVal);
     void        optRemoveRedundantZeroInits();
     PhaseStatus optIfConversion(); // If conversion
@@ -7590,14 +7595,64 @@ private:
     static bool optIterSmallOverflow(int iterAtExit, var_types incrType);
     static bool optIterSmallUnderflow(int iterAtExit, var_types decrType);
 
-    bool optComputeLoopRep(int        constInit,
-                           int        constLimit,
-                           int        iterInc,
-                           genTreeOps iterOper,
-                           var_types  iterType,
-                           genTreeOps testOper,
-                           bool       unsignedTest,
-                           unsigned*  iterCount);
+    struct LoopUnrollPlan
+    {
+        enum UnrollKind
+        {
+            NoUnroll,
+            Full,
+            Partial,
+        };
+
+        UnrollKind Kind = NoUnroll;
+
+        // Number of copies to generate. For Full, this is the exact trip count.
+        // For Partial, this is the unroll factor for the generated loop.
+        unsigned UnrollCount = 0;
+
+        // Exact number of test executions, when known.
+        unsigned IterationCount = 0;
+
+        unsigned LoopCostSz = 0;
+        unsigned LoopCostEx = 0;
+        unsigned GuardCostSz = 0;
+        unsigned GuardCostEx = 0;
+        unsigned MainLoopCostEx = 0;
+        int      UnrollCostSz = 0;
+
+        // True when it is safe and profitable to replace IV uses in full-unroll
+        // copies with the statically known IV value.
+        bool ReplaceIterWithConst = false;
+
+        // True when the duplicated loop tests are made unconditional.
+        bool RemoveLoopTests = false;
+
+        // True when a partial-unroll plan creates a guarded main loop and uses
+        // the original loop as the tail.
+        bool UseGuardWithTail = false;
+
+        // True when IterationCount is known exactly.
+        bool HasIterationCount = false;
+
+        bool IsFullUnroll() const
+        {
+            return Kind == Full;
+        }
+
+        bool IsPartialUnroll() const
+        {
+            return Kind == Partial;
+        }
+    };
+
+    static int  optNormalizeLoopIter(int iterValue, var_types iterOperType);
+    static bool optAdvanceLoopIter(int* iterValue, int iterConst, genTreeOps iterOper, var_types iterOperType);
+
+    bool optComputeLoopRep(FlowGraphNaturalLoop* loop,
+                           NaturalLoopIterInfo* iterInfo,
+                           unsigned             loopCostSz,
+                           unsigned             loopCostEx,
+                           LoopUnrollPlan*      plan);
 
 protected:
     bool optNarrowTree(GenTree* tree, var_types srct, var_types dstt, ValueNumPair vnpNarrow, bool doit);

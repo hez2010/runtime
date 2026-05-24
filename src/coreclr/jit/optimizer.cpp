@@ -242,6 +242,17 @@ void Compiler::optScaleLoopBlocks(FlowGraphNaturalLoop* loop)
 //
 unsigned Compiler::optIsLoopIncrTree(GenTree* incr)
 {
+    if (incr->OperIs(GT_STORE_LCL_VAR))
+    {
+        GenTreeLclVar* store = incr->AsLclVar();
+        GenTree*       data  = store->Data();
+        if (data->OperIs(GT_NEG) && data->gtGetOp1()->OperIs(GT_LCL_VAR) &&
+            (data->gtGetOp1()->AsLclVarCommon()->GetLclNum() == store->GetLclNum()))
+        {
+            return store->GetLclNum();
+        }
+    }
+
     GenTree*   incrVal;
     genTreeOps updateOper;
     unsigned   iterVar = incr->IsLclVarUpdateTree(&incrVal, &updateOper);
@@ -253,6 +264,8 @@ unsigned Compiler::optIsLoopIncrTree(GenTree* incr)
             case GT_ADD:
             case GT_SUB:
             case GT_MUL:
+            case GT_DIV:
+            case GT_UDIV:
             case GT_RSH:
             case GT_LSH:
                 break;
@@ -701,386 +714,598 @@ bool Compiler::optIterSmallUnderflow(int iterAtExit, var_types decrType)
 }
 
 //-----------------------------------------------------------------------------
-// optComputeLoopRep: Helper for loop unrolling. Computes the number of times
-// the test block of a loop is executed.
+// optNormalizeLoopIter: Helper for loop unrolling. Normalize an iterator value
+// to the type used by the iterator operation.
 //
 // Arguments:
-//    constInit     - loop constant initial value
-//    constLimit    - loop constant limit
-//    iterInc       - loop iteration increment
-//    iterOper      - loop iteration increment operator (ADD, SUB, etc.)
-//    iterOperType  - iteration operator type
-//    testOper      - type of loop test (i.e. GT_LE, GT_GE, etc.)
-//    unsTest       - true if test is unsigned
-//    iterCount     - *iterCount is set to the iteration count, if the function returns `true`
+//    iterOperType - iteration operator type
+//    iterValue    - iterator value
 //
 // Returns:
-//   true if the loop has a constant repetition count, false if that cannot be proven
+//   The normalized iterator value.
 //
-bool Compiler::optComputeLoopRep(int        constInit,
-                                 int        constLimit,
-                                 int        iterInc,
-                                 genTreeOps iterOper,
-                                 var_types  iterOperType,
-                                 genTreeOps testOper,
-                                 bool       unsTest,
-                                 unsigned*  iterCount)
+// static
+int Compiler::optNormalizeLoopIter(int iterValue, var_types iterOperType)
 {
     noway_assert(genActualType(iterOperType) == TYP_INT);
 
-    int64_t constInitX;
-    int64_t constLimitX;
-
-    unsigned loopCount;
-    int      iterSign;
-
-    // Using this, we can just do a signed comparison with other 32 bit values.
-    if (unsTest)
+    switch (iterOperType)
     {
-        constLimitX = (unsigned int)constLimit;
+        case TYP_BYTE:
+            return static_cast<signed char>(iterValue);
+        case TYP_UBYTE:
+            return static_cast<unsigned char>(iterValue);
+        case TYP_SHORT:
+            return static_cast<short>(iterValue);
+        case TYP_USHORT:
+            return static_cast<unsigned short>(iterValue);
+        case TYP_UINT:
+        case TYP_INT:
+            return iterValue;
+        default:
+            noway_assert(!"Bad iterator type");
+            return iterValue;
+    }
+}
+
+//-----------------------------------------------------------------------------
+// optAdvanceLoopIter: Helper for loop unrolling. Compute the next iterator value.
+//
+// Arguments:
+//    iterValue    - [in, out] iterator value
+//    iterConst    - loop iteration constant, ignored for unary iterators
+//    iterOper     - loop iteration operator
+//    iterOperType - iteration operator type
+//
+// Returns:
+//   true if the next value was computed, false if evaluating the iterator would throw
+//
+// static
+bool Compiler::optAdvanceLoopIter(int* iterValue, int iterConst, genTreeOps iterOper, var_types iterOperType)
+{
+    noway_assert(genActualType(iterOperType) == TYP_INT);
+
+    int      value  = optNormalizeLoopIter(*iterValue, iterOperType);
+    int      result = 0;
+    uint32_t uvalue = static_cast<uint32_t>(value);
+    uint32_t uconst = static_cast<uint32_t>(iterConst);
+
+    switch (iterOper)
+    {
+        case GT_ADD:
+            result = static_cast<int>(uvalue + uconst);
+            break;
+
+        case GT_SUB:
+            result = static_cast<int>(uvalue - uconst);
+            break;
+
+        case GT_MUL:
+            result = static_cast<int>(uvalue * uconst);
+            break;
+
+        case GT_DIV:
+            if ((iterConst == 0) || ((value == INT_MIN) && (iterConst == -1)))
+            {
+                return false;
+            }
+            result = value / iterConst;
+            break;
+
+        case GT_UDIV:
+            if (uconst == 0)
+            {
+                return false;
+            }
+            result = static_cast<int>(uvalue / uconst);
+            break;
+
+        case GT_RSH:
+            result = value >> (uconst & 0x1F);
+            break;
+
+        case GT_LSH:
+            result = static_cast<int>(uvalue << (uconst & 0x1F));
+            break;
+
+        case GT_NEG:
+            result = static_cast<int>(0 - uvalue);
+            break;
+
+        default:
+            return false;
+    }
+
+    *iterValue = optNormalizeLoopIter(result, iterOperType);
+    return true;
+}
+
+//-----------------------------------------------------------------------------
+// optCreateLoopUnrollGuardCondition: Create the condition that protects a
+// partially unrolled loop.
+//
+// Arguments:
+//    iterInfo    - loop iteration information
+//    unrollCount - partial unroll factor
+//
+// Returns:
+//   A condition that is true if the next unrollCount - 1 loop tests would all
+//   continue the loop.
+//
+// Remarks:
+//   The loop header is reached only when the current iteration is known to be
+//   valid, so the guard starts with the iterator value after one update. The
+//   generated expression checks all intermediate loop tests, instead of just
+//   the final lookahead, so non-monotonic iterator operations remain correct.
+//
+GenTree* Compiler::optCreateLoopUnrollGuardCondition(NaturalLoopIterInfo* iterInfo, unsigned unrollCount)
+{
+    assert(unrollCount >= 2);
+
+    GenTree*   iterValue    = gtCloneExpr(iterInfo->Iterator());
+    GenTree*   guard        = nullptr;
+    genTreeOps iterOper     = iterInfo->IterOper();
+    var_types  iterOperType = iterInfo->IterOperType();
+    var_types  iterType     = genActualType(iterOperType);
+    int        iterConst    = iterOper == GT_NEG ? 0 : iterInfo->IterConst();
+    GenTree*   iterTree     = iterInfo->IterTree->AsLclVar()->Data();
+
+    assert((iterOperType == TYP_INT) || (iterOperType == TYP_UINT));
+
+    for (unsigned i = 1; i < unrollCount; i++)
+    {
+        if (iterOper == GT_NEG)
+        {
+            iterValue = gtNewOperNode(GT_NEG, iterType, iterValue);
+        }
+        else
+        {
+            iterValue = gtNewOperNode(iterOper, iterType, iterValue, gtNewIconNode(iterConst, iterType));
+        }
+
+        if (iterTree->IsUnsigned() && iterValue->OperIs(GT_ADD, GT_SUB, GT_MUL))
+        {
+            iterValue->SetUnsigned();
+        }
+
+        GenTree* relop =
+            gtNewOperNode(iterInfo->TestOper(), TYP_INT, (i + 1 == unrollCount) ? iterValue : gtCloneExpr(iterValue),
+                          gtCloneExpr(iterInfo->Limit()));
+
+        if (iterInfo->TestTree->IsUnsigned())
+        {
+            relop->SetUnsigned();
+        }
+
+        guard = (guard == nullptr) ? relop : gtNewOperNode(GT_AND, TYP_INT, guard, relop);
+    }
+
+    assert(guard != nullptr);
+
+    if (guard->OperIsCmpCompare())
+    {
+        guard->gtFlags |= (GTF_RELOP_JMP_USED | GTF_DONT_CSE);
+    }
+
+    return guard;
+}
+
+//-----------------------------------------------------------------------------
+// optComputeLoopRep: Helper for loop unrolling. Computes a loop unrolling plan.
+//
+// Arguments:
+//    loop       - loop being considered
+//    iterInfo   - loop iteration information
+//    loopCostSz - estimated code size cost for one iteration
+//    loopCostEx - estimated execution cost for one iteration
+//    plan       - [out] unrolling plan
+//
+// Returns:
+//   true if unrolling is legal and profitable
+//
+bool Compiler::optComputeLoopRep(FlowGraphNaturalLoop* loop,
+                                 NaturalLoopIterInfo*  iterInfo,
+                                 unsigned              loopCostSz,
+                                 unsigned              loopCostEx,
+                                 LoopUnrollPlan*       plan)
+{
+    static const unsigned ITER_LIMIT[COUNT_OPT_CODE + 1] = {
+        10, // BLENDED_CODE
+        0,  // SMALL_CODE
+        20, // FAST_CODE
+        0   // COUNT_OPT_CODE
+    };
+
+    assert(ITER_LIMIT[SMALL_CODE] == 0);
+    assert(ITER_LIMIT[COUNT_OPT_CODE] == 0);
+
+    unsigned iterLimit = ITER_LIMIT[compCodeOpt()];
+
+#ifdef DEBUG
+    const bool stressUnroll = compStressCompile(STRESS_UNROLL_LOOPS, 50);
+    if (stressUnroll)
+    {
+        iterLimit *= 10;
+    }
+#else
+    const bool stressUnroll = false;
+#endif
+
+    static const int UNROLL_LIMIT_SZ[COUNT_OPT_CODE + 1] = {
+        300, // BLENDED_CODE
+        0,   // SMALL_CODE
+        600, // FAST_CODE
+        0    // COUNT_OPT_CODE
+    };
+
+    assert(UNROLL_LIMIT_SZ[SMALL_CODE] == 0);
+    assert(UNROLL_LIMIT_SZ[COUNT_OPT_CODE] == 0);
+
+    int unrollLimitSz = UNROLL_LIMIT_SZ[compCodeOpt()];
+    if (stressUnroll)
+    {
+        unrollLimitSz *= 4;
+    }
+
+    *plan              = LoopUnrollPlan();
+    plan->LoopCostSz   = loopCostSz;
+    plan->LoopCostEx   = loopCostEx;
+    plan->UnrollCostSz = 0;
+
+    GenTree* const iterTree     = iterInfo->IterTree->AsLclVar()->Data();
+    genTreeOps     iterOper     = iterInfo->IterOper();
+    var_types      iterOperType = iterInfo->IterOperType();
+    int            iterConst    = iterOper == GT_NEG ? 0 : iterInfo->IterConst();
+    genTreeOps     testOper     = iterInfo->TestOper();
+    const bool     unsTest      = iterInfo->TestTree->IsUnsigned();
+
+    bool     hasExactIterCount = false;
+    unsigned totalIter         = 0;
+
+    if (iterInfo->HasConstInit && iterInfo->HasConstLimit && !iterTree->gtOverflowEx())
+    {
+        int iterValue  = optNormalizeLoopIter(iterInfo->ConstInitValue, iterOperType);
+        int limitValue = iterInfo->ConstLimit();
+
+        JITDUMP("Computing exact loop repetition count from const init/limit\n");
+
+        while (true)
+        {
+            bool loopTest = false;
+            if (unsTest)
+            {
+                uint32_t iterValueUnsigned  = static_cast<uint32_t>(iterValue);
+                uint32_t limitValueUnsigned = static_cast<uint32_t>(limitValue);
+                switch (testOper)
+                {
+                    case GT_EQ:
+                        loopTest = iterValueUnsigned == limitValueUnsigned;
+                        break;
+                    case GT_NE:
+                        loopTest = iterValueUnsigned != limitValueUnsigned;
+                        break;
+                    case GT_LT:
+                        loopTest = iterValueUnsigned < limitValueUnsigned;
+                        break;
+                    case GT_LE:
+                        loopTest = iterValueUnsigned <= limitValueUnsigned;
+                        break;
+                    case GT_GT:
+                        loopTest = iterValueUnsigned > limitValueUnsigned;
+                        break;
+                    case GT_GE:
+                        loopTest = iterValueUnsigned >= limitValueUnsigned;
+                        break;
+                    default:
+                        unreached();
+                }
+            }
+            else
+            {
+                int32_t iterValueSigned  = static_cast<int32_t>(iterValue);
+                int32_t limitValueSigned = static_cast<int32_t>(limitValue);
+                switch (testOper)
+                {
+                    case GT_EQ:
+                        loopTest = iterValueSigned == limitValueSigned;
+                        break;
+                    case GT_NE:
+                        loopTest = iterValueSigned != limitValueSigned;
+                        break;
+                    case GT_LT:
+                        loopTest = iterValueSigned < limitValueSigned;
+                        break;
+                    case GT_LE:
+                        loopTest = iterValueSigned <= limitValueSigned;
+                        break;
+                    case GT_GT:
+                        loopTest = iterValueSigned > limitValueSigned;
+                        break;
+                    case GT_GE:
+                        loopTest = iterValueSigned >= limitValueSigned;
+                        break;
+                    default:
+                        unreached();
+                }
+            }
+
+            if (!loopTest)
+            {
+                hasExactIterCount = true;
+                break;
+            }
+
+            if (totalIter >= iterLimit + 1)
+            {
+                JITDUMP("Exact loop repetition count exceeds full-unroll limit %u\n", iterLimit);
+                break;
+            }
+
+            if (!optAdvanceLoopIter(&iterValue, iterConst, iterOper, iterOperType))
+            {
+                JITDUMP("Exact loop repetition count unavailable: iterator may throw\n");
+                break;
+            }
+
+            totalIter++;
+        }
     }
     else
     {
-        constLimitX = (signed int)constLimit;
+        JITDUMP("Exact loop repetition count unavailable:");
+        if (!iterInfo->HasConstInit)
+        {
+            JITDUMP(" non-const init");
+        }
+        if (!iterInfo->HasConstLimit)
+        {
+            JITDUMP(" non-const limit");
+        }
+        if (iterTree->gtOverflowEx())
+        {
+            JITDUMP(" checked-overflow iterator");
+        }
+        JITDUMP("\n");
     }
 
-    switch (iterOperType)
+    if (hasExactIterCount)
     {
-        // For small types, the iteration operator will narrow these values if big
+        JITDUMP("Computed loop repetition count (number of test block executions) to be %u\n", totalIter);
 
-#define INIT_ITER_BY_TYPE(type)                                                                                        \
-    constInitX = (type)constInit;                                                                                      \
-    iterInc    = (type)iterInc;
-
-        case TYP_BYTE:
-            INIT_ITER_BY_TYPE(signed char);
-            break;
-        case TYP_UBYTE:
-            INIT_ITER_BY_TYPE(unsigned char);
-            break;
-        case TYP_SHORT:
-            INIT_ITER_BY_TYPE(signed short);
-            break;
-        case TYP_USHORT:
-            INIT_ITER_BY_TYPE(unsigned short);
-            break;
-
-            // For the big types, 32 bit arithmetic is performed
-
-        case TYP_INT:
-            if (unsTest)
+        if (totalIter > iterLimit)
+        {
+            JITDUMP("Full unroll rejected: too many iterations (%u > %u) (heuristic)\n", totalIter, iterLimit);
+        }
+        else
+        {
+            int fullUnrollLimitSz = unrollLimitSz;
+            if (totalIter <= 1)
             {
-                constInitX = (unsigned int)constInit;
+                // No limit for single iteration loops. If there is no iteration, we will remove the loop body entirely.
+                fullUnrollLimitSz = INT_MAX;
+            }
+
+            if ((totalIter <= opts.compJitUnrollLoopMaxIterationCount) || iterInfo->HasSimdLimit || stressUnroll)
+            {
+                ClrSafeInt<unsigned> fullUnrollCostSzUnsigned =
+                    ClrSafeInt<unsigned>(loopCostSz) * ClrSafeInt<unsigned>(totalIter);
+                ClrSafeInt<int> fullUnrollCostSz =
+                    ClrSafeInt<int>(fullUnrollCostSzUnsigned) - ClrSafeInt<int>(loopCostSz + 8);
+
+                if (!fullUnrollCostSz.IsOverflow() && (fullUnrollCostSz.Value() <= fullUnrollLimitSz))
+                {
+                    plan->Kind                 = LoopUnrollPlan::Full;
+                    plan->UnrollCount          = totalIter;
+                    plan->IterationCount       = totalIter;
+                    plan->UnrollCostSz         = fullUnrollCostSz.Value();
+                    plan->ReplaceIterWithConst = true;
+                    plan->RemoveLoopTests      = true;
+                    plan->HasIterationCount    = true;
+                    JITDUMP("Full unroll accepted: costSz=%d, limit=%d\n", plan->UnrollCostSz, fullUnrollLimitSz);
+                    return true;
+                }
+
+                JITDUMP("Full unroll rejected: size constraint (%d > %d) (heuristic)\n",
+                        fullUnrollCostSz.IsOverflow() ? INT_MAX : fullUnrollCostSz.Value(), fullUnrollLimitSz);
             }
             else
             {
-                constInitX = (signed int)constInit;
+                JITDUMP("Full unroll rejected: insufficiently simple loop (heuristic)\n");
             }
-            break;
-
-        default:
-            noway_assert(!"Bad type");
-            NO_WAY("Bad type");
-    }
-
-    // If iterInc is zero we have an infinite loop.
-    if (iterInc == 0)
-    {
-        return false;
-    }
-
-    iterSign  = (iterInc > 0) ? +1 : -1;
-    loopCount = 0;
-
-    // bail if count is based on wrap-around math
-    if (iterInc > 0)
-    {
-        if (constLimitX < constInitX)
-        {
-            return false;
         }
     }
-    else if (constLimitX > constInitX)
+
+    if (unrollLimitSz <= 0)
     {
+        JITDUMP("Partial unroll rejected: disabled for current code optimization mode\n");
         return false;
     }
 
-    // Compute the number of repetitions.
-
-    switch (testOper)
+    if ((iterOperType != TYP_INT) && (iterOperType != TYP_UINT))
     {
-        int64_t iterAtExitX;
+        JITDUMP("Partial unroll rejected: iterator type %s needs per-step narrowing\n", varTypeName(iterOperType));
+        return false;
+    }
 
-        case GT_EQ:
-            // Something like "for (i=init; i == lim; i++)" doesn't make any sense.
-            return false;
+    if (iterTree->gtOverflowEx())
+    {
+        JITDUMP("Partial unroll rejected: checked-overflow iterator cannot be speculated in the guard\n");
+        return false;
+    }
 
-        case GT_NE:
-            // Consider: "for (i = init; i != lim; i += const)"
-            // This is tricky since it may have a constant number of iterations or loop forever.
-            // We have to compute "(lim - init) mod iterInc" to see if it is zero.
-            // If "mod iterInc" is not zero then the limit test will miss and a wrap will occur
-            // which is probably not what the end user wanted, but it is legal.
+    if (((iterOper == GT_DIV) && ((iterConst == 0) || (iterConst == -1))) ||
+        ((iterOper == GT_UDIV) && (static_cast<unsigned>(iterConst) == 0)))
+    {
+        JITDUMP("Partial unroll rejected: iterator update may throw when speculated in the guard\n");
+        return false;
+    }
 
-            if (iterInc > 0)
-            {
-                // Stepping by one, i.e. Mod with 1 is always zero.
-                if (iterInc != 1)
-                {
-                    if (((constLimitX - constInitX) % iterInc) != 0)
-                    {
-                        return false;
-                    }
-                }
-            }
-            else
-            {
-                // Stepping by -1, i.e. Mod with 1 is always zero.
-                if (iterInc != -1)
-                {
-                    if (((constInitX - constLimitX) % (-iterInc)) != 0)
-                    {
-                        return false;
-                    }
-                }
-            }
+    if ((loop->BackEdges().size() != 1) || (loop->BackEdge(0)->getSourceBlock() != iterInfo->TestBlock))
+    {
+        JITDUMP("Partial unroll rejected: loop has %zu backedges and IV test is " FMT_BB " (heuristic)\n",
+                loop->BackEdges().size(), iterInfo->TestBlock->bbNum);
+        return false;
+    }
 
-            switch (iterOper)
-            {
-                case GT_SUB:
-                    iterInc = -iterInc;
-                    FALLTHROUGH;
+    if (hasExactIterCount && (totalIter <= 1))
+    {
+        JITDUMP("Partial unroll rejected: exact iteration count %u is too small\n", totalIter);
+        return false;
+    }
 
-                case GT_ADD:
-                    if (constInitX != constLimitX)
-                    {
-                        loopCount += (unsigned)((constLimitX - constInitX - iterSign) / iterInc) + 1;
-                    }
+    const weight_t normalizedWeight = loop->GetHeader()->getBBWeight(this);
+    if (!stressUnroll && (normalizedWeight < (2 * BB_UNITY_WEIGHT)))
+    {
+        JITDUMP("Partial unroll rejected: loop weight " FMT_WT " is too low (heuristic)\n", normalizedWeight);
+        return false;
+    }
 
-                    iterAtExitX = (int)(constInitX + iterInc * (int)loopCount);
-
-                    if (unsTest)
-                    {
-                        iterAtExitX = (unsigned)iterAtExitX;
-                    }
-
-                    // Check if iteration incr will cause overflow for small types
-                    if (optIterSmallOverflow((int)iterAtExitX, iterOperType))
-                    {
-                        return false;
-                    }
-
-                    // iterator with 32bit overflow. Bad for TYP_(U)INT
-                    if (iterAtExitX < constLimitX)
-                    {
-                        return false;
-                    }
-
-                    *iterCount = loopCount;
-                    return true;
-
-                case GT_MUL:
-                case GT_DIV:
-                case GT_RSH:
-                case GT_LSH:
-                case GT_UDIV:
-                    return false;
-
-                default:
-                    noway_assert(!"Unknown operator for loop iterator");
-                    return false;
-            }
-
-        case GT_LT:
-            switch (iterOper)
-            {
-                case GT_SUB:
-                    iterInc = -iterInc;
-                    FALLTHROUGH;
-
-                case GT_ADD:
-                    if (constInitX < constLimitX)
-                    {
-                        loopCount += (unsigned)((constLimitX - constInitX - iterSign) / iterInc) + 1;
-                    }
-
-                    iterAtExitX = (int)(constInitX + iterInc * (int)loopCount);
-
-                    if (unsTest)
-                    {
-                        iterAtExitX = (unsigned)iterAtExitX;
-                    }
-
-                    // Check if iteration incr will cause overflow for small types
-                    if (optIterSmallOverflow((int)iterAtExitX, iterOperType))
-                    {
-                        return false;
-                    }
-
-                    // iterator with 32bit overflow. Bad for TYP_(U)INT
-                    if (iterAtExitX < constLimitX)
-                    {
-                        return false;
-                    }
-
-                    *iterCount = loopCount;
-                    return true;
-
-                case GT_MUL:
-                case GT_DIV:
-                case GT_RSH:
-                case GT_LSH:
-                case GT_UDIV:
-                    return false;
-
-                default:
-                    noway_assert(!"Unknown operator for loop iterator");
-                    return false;
-            }
-
-        case GT_LE:
-            switch (iterOper)
-            {
-                case GT_SUB:
-                    iterInc = -iterInc;
-                    FALLTHROUGH;
-
-                case GT_ADD:
-                    if (constInitX <= constLimitX)
-                    {
-                        loopCount += (unsigned)((constLimitX - constInitX) / iterInc) + 1;
-                    }
-
-                    iterAtExitX = (int)(constInitX + iterInc * (int)loopCount);
-
-                    if (unsTest)
-                    {
-                        iterAtExitX = (unsigned)iterAtExitX;
-                    }
-
-                    // Check if iteration incr will cause overflow for small types
-                    if (optIterSmallOverflow((int)iterAtExitX, iterOperType))
-                    {
-                        return false;
-                    }
-
-                    // iterator with 32bit overflow. Bad for TYP_(U)INT
-                    if (iterAtExitX <= constLimitX)
-                    {
-                        return false;
-                    }
-
-                    *iterCount = loopCount;
-                    return true;
-
-                case GT_MUL:
-                case GT_DIV:
-                case GT_RSH:
-                case GT_LSH:
-                case GT_UDIV:
-                    return false;
-
-                default:
-                    noway_assert(!"Unknown operator for loop iterator");
-                    return false;
-            }
-
-        case GT_GT:
-            switch (iterOper)
-            {
-                case GT_SUB:
-                    iterInc = -iterInc;
-                    FALLTHROUGH;
-
-                case GT_ADD:
-                    if (constInitX > constLimitX)
-                    {
-                        loopCount += (unsigned)((constLimitX - constInitX - iterSign) / iterInc) + 1;
-                    }
-
-                    iterAtExitX = (int)(constInitX + iterInc * (int)loopCount);
-
-                    if (unsTest)
-                    {
-                        iterAtExitX = (unsigned)iterAtExitX;
-                    }
-
-                    // Check if small types will underflow
-                    if (optIterSmallUnderflow((int)iterAtExitX, iterOperType))
-                    {
-                        return false;
-                    }
-
-                    // iterator with 32bit underflow. Bad for TYP_INT and unsigneds
-                    if (iterAtExitX > constLimitX)
-                    {
-                        return false;
-                    }
-
-                    *iterCount = loopCount;
-                    return true;
-
-                case GT_MUL:
-                case GT_DIV:
-                case GT_RSH:
-                case GT_LSH:
-                case GT_UDIV:
-                    return false;
-
-                default:
-                    noway_assert(!"Unknown operator for loop iterator");
-                    return false;
-            }
-
-        case GT_GE:
-            switch (iterOper)
-            {
-                case GT_SUB:
-                    iterInc = -iterInc;
-                    FALLTHROUGH;
-
-                case GT_ADD:
-                    if (constInitX >= constLimitX)
-                    {
-                        loopCount += (unsigned)((constLimitX - constInitX) / iterInc) + 1;
-                    }
-
-                    iterAtExitX = (int)(constInitX + iterInc * (int)loopCount);
-
-                    if (unsTest)
-                    {
-                        iterAtExitX = (unsigned)iterAtExitX;
-                    }
-
-                    // Check if small types will underflow
-                    if (optIterSmallUnderflow((int)iterAtExitX, iterOperType))
-                    {
-                        return false;
-                    }
-
-                    // iterator with 32bit underflow. Bad for TYP_INT and unsigneds
-                    if (iterAtExitX >= constLimitX)
-                    {
-                        return false;
-                    }
-
-                    *iterCount = loopCount;
-                    return true;
-
-                case GT_MUL:
-                case GT_DIV:
-                case GT_RSH:
-                case GT_LSH:
-                case GT_UDIV:
-                    return false;
-
-                default:
-                    noway_assert(!"Unknown operator for loop iterator");
-                    return false;
-            }
-
+    unsigned iterOperCostEx;
+    unsigned iterOperCostSz;
+    switch (iterOper)
+    {
+        case GT_DIV:
+        case GT_UDIV:
+            iterOperCostEx = 12;
+            iterOperCostSz = 4;
+            break;
+        case GT_MUL:
+            iterOperCostEx = 3;
+            iterOperCostSz = 2;
+            break;
+        case GT_ADD:
+        case GT_SUB:
+        case GT_RSH:
+        case GT_LSH:
+        case GT_NEG:
+            iterOperCostEx = 1;
+            iterOperCostSz = 1;
+            break;
         default:
-            noway_assert(!"Unknown operator for loop condition");
+            unreached();
+    }
+
+    Statement* const testStmt          = iterInfo->TestBlock->lastStmt();
+    const unsigned   testCostSz        = max(static_cast<unsigned>(testStmt->GetCostSz()), 1u);
+    const unsigned   testCostEx        = max(static_cast<unsigned>(testStmt->GetCostEx()), 1u);
+    const unsigned   branchCostEx      = 2;
+    const unsigned   bodyCostEx        = max(loopCostEx - min(loopCostEx, testCostEx), 1u);
+
+    const unsigned maxFactor                    = compCodeOpt() == FAST_CODE ? 8 : 4;
+    const unsigned minUsefulRemainingIterations = 2;
+    const unsigned exposureCreditDivisor =
+        normalizedWeight >= (BB_LOOP_WEIGHT_SCALE * BB_UNITY_WEIGHT) ? 8 : 16;
+
+    for (unsigned factor = maxFactor; factor >= 2; factor /= 2)
+    {
+        if (hasExactIterCount && (totalIter < (factor * minUsefulRemainingIterations)))
+        {
+            JITDUMP("Partial unroll factor %u rejected: exact iteration count %u is too small\n", factor, totalIter);
+            continue;
+        }
+
+        const unsigned guardTests       = factor - 1;
+        const unsigned guardAnds        = factor > 2 ? factor - 2 : 0;
+        const unsigned guardIterUpdates = (guardTests * (guardTests + 1)) / 2;
+
+        ClrSafeInt<unsigned> guardCostSz =
+            (ClrSafeInt<unsigned>(guardTests) * ClrSafeInt<unsigned>(testCostSz)) +
+            (ClrSafeInt<unsigned>(guardIterUpdates) * ClrSafeInt<unsigned>(iterOperCostSz)) +
+            ClrSafeInt<unsigned>(guardAnds);
+        ClrSafeInt<unsigned> guardCostEx =
+            (ClrSafeInt<unsigned>(guardTests) * ClrSafeInt<unsigned>(testCostEx)) +
+            (ClrSafeInt<unsigned>(guardIterUpdates) * ClrSafeInt<unsigned>(iterOperCostEx)) +
+            ClrSafeInt<unsigned>(guardAnds);
+        ClrSafeInt<unsigned> unrolledCostSz = (ClrSafeInt<unsigned>(loopCostSz) * ClrSafeInt<unsigned>(factor)) -
+                                              (ClrSafeInt<unsigned>(testCostSz) * ClrSafeInt<unsigned>(factor - 1)) +
+                                              guardCostSz;
+        ClrSafeInt<unsigned> mainLoopCostEx = (ClrSafeInt<unsigned>(loopCostEx) * ClrSafeInt<unsigned>(factor)) -
+                                              (ClrSafeInt<unsigned>(testCostEx) * ClrSafeInt<unsigned>(factor - 1)) +
+                                              guardCostEx;
+
+        if (guardCostSz.IsOverflow() || guardCostEx.IsOverflow() || unrolledCostSz.IsOverflow() ||
+            mainLoopCostEx.IsOverflow())
+        {
+            JITDUMP("Partial unroll factor %u rejected: cost overflow\n", factor);
+            continue;
+        }
+
+        const unsigned       eliminatedBranchTests = factor - 2;
+        ClrSafeInt<unsigned> branchSavings =
+            ClrSafeInt<unsigned>(eliminatedBranchTests) * ClrSafeInt<unsigned>(branchCostEx);
+        ClrSafeInt<unsigned> guardExtraCost =
+            (ClrSafeInt<unsigned>(guardIterUpdates) * ClrSafeInt<unsigned>(iterOperCostEx)) +
+            ClrSafeInt<unsigned>(guardAnds);
+
+        // Branch removal is not the only benefit: the larger straight-line body
+        // can also enable downstream optimization. Keep that credit small so
+        // code growth and guard work still dominate marginal cases.
+        ClrSafeInt<unsigned> bodyExposureCredit =
+            ClrSafeInt<unsigned>(bodyCostEx) * ClrSafeInt<unsigned>(factor);
+
+        if (branchSavings.IsOverflow() || guardExtraCost.IsOverflow() || bodyExposureCredit.IsOverflow())
+        {
+            JITDUMP("Partial unroll factor %u rejected: benefit overflow\n", factor);
+            continue;
+        }
+
+        unsigned exposureCredit = bodyExposureCredit.Value() / exposureCreditDivisor;
+        if (stressUnroll)
+        {
+            exposureCredit = bodyExposureCredit.Value();
+        }
+
+        ClrSafeInt<unsigned> benefitScore = branchSavings + ClrSafeInt<unsigned>(exposureCredit);
+        if (benefitScore.IsOverflow())
+        {
+            JITDUMP("Partial unroll factor %u rejected: benefit overflow\n", factor);
+            continue;
+        }
+
+        if (!stressUnroll && (benefitScore.Value() <= guardExtraCost.Value()))
+        {
+            JITDUMP("Partial unroll factor %u rejected: benefit score %u <= guard extra cost %u "
+                    "(branch savings=%u, exposure credit=%u) (heuristic)\n",
+                    factor, benefitScore.Value(), guardExtraCost.Value(),
+                    branchSavings.IsOverflow() ? UINT_MAX : branchSavings.Value(),
+                    exposureCredit);
+            continue;
+        }
+
+        // Keep the generated loop small enough to fit comfortably in the LSD/uop-cache-friendly range on xarch
+        // while also limiting code-size growth on targets where that hardware detail does not apply. The cost is
+        // for one unrolled chunk and accounts for the removed per-iteration tests and the new guard.
+        const unsigned maxMainLoopCostEx = compCodeOpt() == FAST_CODE ? 128 : 96;
+        if (mainLoopCostEx.Value() > maxMainLoopCostEx)
+        {
+            JITDUMP("Partial unroll factor %u rejected: main-loop execution cost %u > %u (heuristic)\n", factor,
+                    mainLoopCostEx.Value(), maxMainLoopCostEx);
+            continue;
+        }
+
+        if (unrolledCostSz.Value() > static_cast<unsigned>(unrollLimitSz))
+        {
+            JITDUMP("Partial unroll factor %u rejected: size cost %u > %d (heuristic)\n", factor,
+                    unrolledCostSz.Value(), unrollLimitSz);
+            continue;
+        }
+
+        plan->Kind              = LoopUnrollPlan::Partial;
+        plan->UnrollCount       = factor;
+        plan->IterationCount    = hasExactIterCount ? totalIter : 0;
+        plan->UnrollCostSz      = static_cast<int>(unrolledCostSz.Value());
+        plan->GuardCostSz       = guardCostSz.Value();
+        plan->GuardCostEx       = guardCostEx.Value();
+        plan->MainLoopCostEx    = mainLoopCostEx.Value();
+        plan->UseGuardWithTail  = true;
+        plan->HasIterationCount = hasExactIterCount;
+
+        JITDUMP("Partial unroll accepted: factor=%u, growthCostSz=%d, guardCostSz=%u, guardCostEx=%u, "
+                "mainLoopCostEx=%u, eliminatedBranchTests=%u, benefitScore=%u, guardExtraCost=%u, weight=" FMT_WT
+                "; creating guarded main loop with original loop as tail\n",
+                factor, plan->UnrollCostSz, plan->GuardCostSz, plan->GuardCostEx, plan->MainLoopCostEx,
+                eliminatedBranchTests, benefitScore.Value(), guardExtraCost.Value(), normalizedWeight);
+        return true;
     }
 
     return false;
@@ -1089,24 +1314,26 @@ bool Compiler::optComputeLoopRep(int        constInit,
 //-----------------------------------------------------------------------------
 // optUnrollLoops: Look for loop unrolling candidates and unroll them.
 //
-// Loops must be of the form:
-//   for (i=icon; i<icon; i++) { ... }
-//
-// Loops handled are fully unrolled; there is no partial unrolling.
+// Loops must have a single local iterator updated by a supported unary or binary operation
+// and a loop-invariant limit.
 //
 // Limitations: only the following loop types are handled:
-// 1. constant initializer, constant bound
-// 2. The entire loop must be in the same EH region.
-// 3. The loop iteration variable can't be address exposed.
-// 4. The loop iteration variable can't be a promoted struct field.
-// 5. We must be able to calculate the total constant iteration count.
+// 1. full unrolling requires a constant initializer and constant bound
+// 2. partial unrolling creates a guarded main loop and uses the original loop as the tail
+// 3. The entire loop must be in the same EH region.
+// 4. The loop iteration variable can't be address exposed.
+// 5. The loop iteration variable can't be a promoted struct field.
+// 6. For full unrolling, we must be able to calculate the total constant iteration count.
 //
 // Cost heuristics:
 // 1. there are cost metrics for maximum number of allowed iterations, and maximum unroll size
-// 2. constant trip count loops are always allowed, up to a limit of 4
-// 3. otherwise, only loops where the limit is Vector<T>.Length are currently allowed
+// 2. constant trip count loops are fully unrolled when small enough
+// 3. partial unrolling requires a hot loop, limited code growth, and an unrolled body
+//    that remains within a small execution-cost budget. The profitability model
+//    accounts for removed loop branches, the guard's lookahead work, and a small
+//    credit for exposing a larger straight-line body to downstream optimizations.
 //
-// In stress modes, these heuristic limits are expanded, and loops aren't required to have the
+// In stress modes, these heuristic limits are expanded, and full unrolling isn't required to have a
 // Vector<T>.Length limit.
 //
 // Loops are processed from innermost to outermost order, to attempt to unroll the most nested loops first.
@@ -1135,8 +1362,9 @@ PhaseStatus Compiler::optUnrollLoops()
 
     // Look for loop unrolling candidates
 
-    int  unrollCount = 0;
-    bool anyIRchange = false;
+    int    unrollCount = 0;
+    bool   anyIRchange = false;
+    BlkSet partiallyUnrolledHeaders(getAllocator(CMK_LoopUnroll));
 
     int passes = 0;
 
@@ -1156,12 +1384,25 @@ PhaseStatus Compiler::optUnrollLoops()
                 continue;
             }
 
-            if (!optTryUnrollLoop(loop, &anyIRchange))
+            if (partiallyUnrolledHeaders.Lookup(loop->GetHeader()))
+            {
+                JITDUMP("Skipping loop " FMT_LP " with header " FMT_BB
+                        ": it was already partially unrolled in this phase\n",
+                        loop->GetIndex(), loop->GetHeader()->bbNum);
+                continue;
+            }
+
+            bool madePartialUnroll = false;
+            if (!optTryUnrollLoop(loop, &anyIRchange, &madePartialUnroll))
             {
                 continue;
             }
 
             unrollCount++;
+            if (madePartialUnroll)
+            {
+                partiallyUnrolledHeaders.Set(loop->GetHeader(), true);
+            }
 
             // Mark in all ancestors now that one of their descendant loops was
             // unrolled to indicate that the set of loop blocks changed.
@@ -1226,42 +1467,16 @@ PhaseStatus Compiler::optUnrollLoops()
 //
 // Parameters:
 //   loop      - The loop to try unrolling
-//   changedIR - [out] Whether or not the IR was changed. Can be true even if
-//               the function returns false.
+//   changedIR         - [out] Whether or not the IR was changed. Can be true even if
+//                       the function returns false.
+//   madePartialUnroll - [out] Whether or not the loop was partially unrolled.
 //
 // Returns:
 //   True if the loop was unrolled, in which case the flow graph was changed.
 //
-bool Compiler::optTryUnrollLoop(FlowGraphNaturalLoop* loop, bool* changedIR)
+bool Compiler::optTryUnrollLoop(FlowGraphNaturalLoop* loop, bool* changedIR, bool* madePartialUnroll)
 {
-    static const unsigned ITER_LIMIT[COUNT_OPT_CODE + 1] = {
-        10, // BLENDED_CODE
-        0,  // SMALL_CODE
-        20, // FAST_CODE
-        0   // COUNT_OPT_CODE
-    };
-
-    assert(ITER_LIMIT[SMALL_CODE] == 0);
-    assert(ITER_LIMIT[COUNT_OPT_CODE] == 0);
-
-    unsigned iterLimit = ITER_LIMIT[compCodeOpt()];
-
-#ifdef DEBUG
-    if (compStressCompile(STRESS_UNROLL_LOOPS, 50))
-    {
-        iterLimit *= 10;
-    }
-#endif
-
-    static const int UNROLL_LIMIT_SZ[COUNT_OPT_CODE + 1] = {
-        300, // BLENDED_CODE
-        0,   // SMALL_CODE
-        600, // FAST_CODE
-        0    // COUNT_OPT_CODE
-    };
-
-    assert(UNROLL_LIMIT_SZ[SMALL_CODE] == 0);
-    assert(UNROLL_LIMIT_SZ[COUNT_OPT_CODE] == 0);
+    *madePartialUnroll = false;
 
     if (loop->GetHeader()->isRunRarely())
     {
@@ -1272,15 +1487,6 @@ bool Compiler::optTryUnrollLoop(FlowGraphNaturalLoop* loop, bool* changedIR)
     NaturalLoopIterInfo iterInfo;
     if (!loop->AnalyzeIteration(&iterInfo))
     {
-        return false;
-    }
-
-    // Check for required flags:
-    // HasConstInit  - required because this transform only handles full unrolls
-    // HasConstLimit - required because this transform only handles full unrolls
-    if (!iterInfo.HasConstInit || !iterInfo.HasConstLimit)
-    {
-        // Don't print to the JitDump about this common case.
         return false;
     }
 
@@ -1305,67 +1511,17 @@ bool Compiler::optTryUnrollLoop(FlowGraphNaturalLoop* loop, bool* changedIR)
     //  - increment operation type (i.e. ADD, SUB, etc...)
     //  - loop test type (i.e. GT_GE, GT_LT, etc...)
 
-    int        lbeg         = iterInfo.ConstInitValue;
-    int        llim         = iterInfo.ConstLimit();
-    genTreeOps testOper     = iterInfo.TestOper();
+    int        lbeg         = iterInfo.HasConstInit ? iterInfo.ConstInitValue : 0;
     unsigned   lvar         = iterInfo.IterVar;
-    int        iterInc      = iterInfo.IterConst();
     genTreeOps iterOper     = iterInfo.IterOper();
+    int        iterInc      = iterOper == GT_NEG ? 0 : iterInfo.IterConst();
     var_types  iterOperType = iterInfo.IterOperType();
-    bool       unsTest      = iterInfo.TestTree->IsUnsigned();
 
     assert(!lvaGetDesc(lvar)->IsAddressExposed());
     assert(!lvaGetDesc(lvar)->lvIsStructField);
 
     JITDUMP("Analyzing candidate for loop unrolling:\n");
     DBEXEC(verbose, FlowGraphNaturalLoop::Dump(loop));
-
-    // Find the number of iterations - the function returns false if not a constant number.
-    unsigned totalIter;
-    if (!optComputeLoopRep(lbeg, llim, iterInc, iterOper, iterOperType, testOper, unsTest, &totalIter))
-    {
-        JITDUMP("Failed to unroll loop " FMT_LP ": not a constant iteration count\n", loop->GetIndex());
-        return false;
-    }
-
-    JITDUMP("Computed loop repetition count (number of test block executions) to be %u\n", totalIter);
-
-    // Forget it if there are too many repetitions or not a constant loop.
-
-    if (totalIter > iterLimit)
-    {
-        JITDUMP("Failed to unroll loop " FMT_LP ": too many iterations (%d > %d) (heuristic)\n", loop->GetIndex(),
-                totalIter, iterLimit);
-        return false;
-    }
-
-    int unrollLimitSz = UNROLL_LIMIT_SZ[compCodeOpt()];
-
-    if (INDEBUG(compStressCompile(STRESS_UNROLL_LOOPS, 50) ||) false)
-    {
-        // In stress mode, quadruple the size limit, and drop
-        // the restriction that loop limit must be vector element count.
-        unrollLimitSz *= 4;
-    }
-    else if (totalIter <= 1)
-    {
-        // No limit for single iteration loops
-        // If there is no iteration (totalIter == 0), we will remove the loop body entirely.
-        unrollLimitSz = INT_MAX;
-    }
-    else if (totalIter <= opts.compJitUnrollLoopMaxIterationCount)
-    {
-        // We can unroll this
-    }
-    else if (iterInfo.HasSimdLimit)
-    {
-        // We can unroll this
-    }
-    else
-    {
-        JITDUMP("Failed to unroll loop " FMT_LP ": insufficiently simple loop (heuristic)\n", loop->GetIndex());
-        return false;
-    }
 
     GenTree* incr = iterInfo.IterTree;
 
@@ -1381,19 +1537,24 @@ bool Compiler::optTryUnrollLoop(FlowGraphNaturalLoop* loop, bool* changedIR)
     // Make sure everything looks ok.
     assert((iterInfo.TestBlock != nullptr) && iterInfo.TestBlock->KindIs(BBJ_COND));
 
-    // clang-format off
-    if (!incr->OperIs(GT_ADD, GT_SUB) ||
-        !incr->AsOp()->gtOp1->OperIs(GT_LCL_VAR) ||
-        (incr->AsOp()->gtOp1->AsLclVarCommon()->GetLclNum() != lvar) ||
-        !incr->AsOp()->gtOp2->OperIs(GT_CNS_INT) ||
-        (incr->AsOp()->gtOp2->AsIntCon()->gtIconVal != iterInc) ||
+    bool validIncr = false;
+    if (incr->OperIs(GT_NEG))
+    {
+        validIncr = incr->gtGetOp1()->OperIs(GT_LCL_VAR) && (incr->gtGetOp1()->AsLclVarCommon()->GetLclNum() == lvar);
+    }
+    else if (incr->OperIs(GT_ADD, GT_SUB, GT_MUL, GT_DIV, GT_UDIV, GT_RSH, GT_LSH))
+    {
+        validIncr = incr->AsOp()->gtOp1->OperIs(GT_LCL_VAR) &&
+                    (incr->AsOp()->gtOp1->AsLclVarCommon()->GetLclNum() == lvar) &&
+                    incr->AsOp()->gtOp2->OperIs(GT_CNS_INT) &&
+                    (static_cast<int>(incr->AsOp()->gtOp2->AsIntCon()->gtIconVal) == iterInc);
+    }
 
-        (iterInfo.TestBlock->lastStmt()->GetRootNode()->gtGetOp1() != iterInfo.TestTree))
+    if (!validIncr || (iterInfo.TestBlock->lastStmt()->GetRootNode()->gtGetOp1() != iterInfo.TestTree))
     {
         noway_assert(!"Bad precondition in Compiler::optUnrollLoops()");
         return false;
     }
-    // clang-format on
 
     bool unrollLoopsWithEH = false;
     INDEBUG(unrollLoopsWithEH = (JitConfig.JitUnrollLoopsWithEH() > 0);)
@@ -1421,16 +1582,24 @@ bool Compiler::optTryUnrollLoop(FlowGraphNaturalLoop* loop, bool* changedIR)
     // TODO: duplication cost is higher if there is EH...
 
     ClrSafeInt<unsigned> loopCostSz; // Cost is size of one iteration
+    ClrSafeInt<unsigned> loopCostEx; // Cost is execution cost of one iteration
 
-    loop->VisitLoopBlocksReversePostOrder([=, &loopCostSz](BasicBlock* block) {
+    loop->VisitLoopBlocksReversePostOrder([=, &loopCostSz, &loopCostEx](BasicBlock* block) {
         for (Statement* const stmt : block->Statements())
         {
             gtSetStmtInfo(stmt);
             loopCostSz += stmt->GetCostSz();
+            loopCostEx += stmt->GetCostEx();
         }
 
         return BasicBlockVisit::Continue;
     });
+
+    if (loopCostSz.IsOverflow() || loopCostEx.IsOverflow())
+    {
+        JITDUMP("Failed to unroll loop " FMT_LP ": cost overflow (heuristic)\n", loop->GetIndex());
+        return false;
+    }
 
 #ifdef DEBUG
     // Today we will never see any BBJ_RETURN blocks because we cannot
@@ -1446,25 +1615,35 @@ bool Compiler::optTryUnrollLoop(FlowGraphNaturalLoop* loop, bool* changedIR)
     });
 #endif
 
-    // Compute the estimated increase in code size for the unrolled loop.
-
-    ClrSafeInt<unsigned> fixedLoopCostSz(8);
-
-    ClrSafeInt<int> unrollCostSz =
-        ClrSafeInt<int>(loopCostSz * ClrSafeInt<unsigned>(totalIter)) - ClrSafeInt<int>(loopCostSz + fixedLoopCostSz);
-
-    // Don't unroll if too much code duplication would result.
-
-    if (unrollCostSz.IsOverflow() || (unrollCostSz.Value() > unrollLimitSz))
+    LoopUnrollPlan plan;
+    if (!optComputeLoopRep(loop, &iterInfo, loopCostSz.Value(), loopCostEx.Value(), &plan))
     {
-        JITDUMP("Failed to unroll loop " FMT_LP ": size constraint (%d > %d) (heuristic)\n", loop->GetIndex(),
-                unrollCostSz.Value(), unrollLimitSz);
+        JITDUMP("Failed to unroll loop " FMT_LP ": no legal/profitable unrolling plan\n", loop->GetIndex());
+        return false;
+    }
+
+    if (plan.IsPartialUnroll() && unrollLoopsWithEH)
+    {
+        JITDUMP("Failed to unroll loop " FMT_LP ": partial unrolling with EH is not supported\n", loop->GetIndex());
         return false;
     }
 
     // Looks like a good idea to unroll this loop, let's do it!
-    JITDUMP("\nUnrolling loop " FMT_LP " unrollCostSz = %d\n", loop->GetIndex(), unrollCostSz.Value());
+    JITDUMP("\nUnrolling loop " FMT_LP " kind=%s unrollCount=%u", loop->GetIndex(),
+            plan.IsFullUnroll() ? "full" : "partial", plan.UnrollCount);
+    if (plan.HasIterationCount)
+    {
+        JITDUMP(" exactIterations=%u", plan.IterationCount);
+    }
+    JITDUMP(" unrollCostSz=%d loopCostSz=%u loopCostEx=%u", plan.UnrollCostSz, plan.LoopCostSz, plan.LoopCostEx);
+    if (plan.UseGuardWithTail)
+    {
+        JITDUMP(" guardCostSz=%u guardCostEx=%u mainLoopCostEx=%u", plan.GuardCostSz, plan.GuardCostEx,
+                plan.MainLoopCostEx);
+    }
+    JITDUMP("\n");
     JITDUMPEXEC(FlowGraphNaturalLoop::Dump(loop));
+    *madePartialUnroll = plan.IsPartialUnroll();
 
     // We unroll a loop focused around the test and IV that was
     // identified by FlowGraphNaturalLoop::AnalyzeIteration. Note that:
@@ -1493,11 +1672,6 @@ bool Compiler::optTryUnrollLoop(FlowGraphNaturalLoop* loop, bool* changedIR)
 
     BlockToBlockMap blockMap(getAllocator(CMK_LoopUnroll));
 
-    BasicBlock* bottom        = loop->GetLexicallyBottomMostBlock();
-    BasicBlock* insertAfter   = bottom;
-    BasicBlock* prevTestBlock = nullptr;
-    unsigned    iterToUnroll  = totalIter; // The number of iterations left to unroll
-
     // Find the exit block of the IV test first. We need to do that
     // here since it may have implicit fallthrough that we'll change
     // below.
@@ -1507,14 +1681,40 @@ bool Compiler::optTryUnrollLoop(FlowGraphNaturalLoop* loop, bool* changedIR)
     BasicBlock* exit =
         loop->ContainsBlock(exiting->GetTrueTarget()) ? exiting->GetFalseTarget() : exiting->GetTrueTarget();
 
-    for (int lval = lbeg; iterToUnroll > 0; iterToUnroll--)
+    BasicBlock* bottom          = loop->GetLexicallyBottomMostBlock();
+    BasicBlock* insertAfter     = bottom;
+    BasicBlock* partialGuard    = nullptr;
+    BasicBlock* firstMainHeader = nullptr;
+    BasicBlock* prevTestBlock   = nullptr;
+    unsigned    copiesToCreate  = plan.UnrollCount;
+
+    if (plan.UseGuardWithTail)
     {
-        // Block weight should no longer have the loop multiplier
+        GenTree* guardCond = optCreateLoopUnrollGuardCondition(&iterInfo, plan.UnrollCount);
+        GenTree* guardJump = gtNewOperNode(GT_JTRUE, TYP_VOID, guardCond);
+
+        DebugInfo debugInfo = iterInfo.TestBlock->lastStmt()->GetDebugInfo();
+        partialGuard        = fgNewBBFromTreeAfter(BBJ_COND, bottom, guardJump, debugInfo, true);
+        partialGuard->inheritWeight(loop->GetHeader());
+        partialGuard->scaleBBWeight(1.0 / plan.UnrollCount);
+        insertAfter = partialGuard;
+
+        JITDUMP("Created partial unroll guard " FMT_BB " to select the unrolled main loop or the original tail loop\n",
+                partialGuard->bbNum);
+
+        optRedirectPrevUnrollIteration(loop, nullptr, partialGuard, exit, false);
+    }
+
+    int lval = lbeg;
+    for (unsigned i = 0; i < copiesToCreate; i++)
+    {
+        // Full-unrolled blocks no longer have the loop multiplier. Partial-unrolled blocks split the original
+        // loop weight across the tail loop, guard, and the new main-loop copies.
         //
         // Note this is not quite right, as we may not have upscaled by this amount
         // and we might not have upscaled at all, if we had profile data.
         //
-        weight_t scaleWeight = 1.0 / BB_LOOP_WEIGHT_SCALE;
+        weight_t scaleWeight = plan.IsPartialUnroll() ? (1.0 / plan.UnrollCount) : (1.0 / BB_LOOP_WEIGHT_SCALE);
 
         if (unrollLoopsWithEH)
         {
@@ -1525,62 +1725,100 @@ bool Compiler::optTryUnrollLoop(FlowGraphNaturalLoop* loop, bool* changedIR)
             loop->Duplicate(&insertAfter, &blockMap, scaleWeight);
         }
 
-        // Replace all uses of the loop iterator with the current value.
-        loop->VisitLoopBlocks([=, &blockMap](BasicBlock* block) {
-            optReplaceScalarUsesWithConst(blockMap[block], lvar, lval);
-            return BasicBlockVisit::Continue;
-        });
+        if (plan.ReplaceIterWithConst)
+        {
+            // Replace all uses of the loop iterator with the current value.
+            loop->VisitLoopBlocks([=, &blockMap](BasicBlock* block) {
+                optReplaceScalarUsesWithConst(blockMap[block], lvar, lval);
+                return BasicBlockVisit::Continue;
+            });
+        }
 
-        // Remove the test we created in the duplicate; we're doing a full unroll.
-        BasicBlock* testBlock = blockMap[iterInfo.TestBlock];
+        BasicBlock* headerBlock = blockMap[loop->GetHeader()];
+        BasicBlock* testBlock   = blockMap[iterInfo.TestBlock];
 
-        optRedirectPrevUnrollIteration(loop, prevTestBlock, blockMap[loop->GetHeader()]);
+        if (plan.UseGuardWithTail)
+        {
+            if (i == 0)
+            {
+                firstMainHeader = headerBlock;
+            }
+            else
+            {
+                optRedirectPrevUnrollIteration(loop, prevTestBlock, headerBlock, exit, true);
+            }
+        }
+        else
+        {
+            optRedirectPrevUnrollIteration(loop, prevTestBlock, headerBlock, exit, plan.RemoveLoopTests);
+        }
 
         // Save the test block of the previously unrolled
         // iteration, so that we can redirect it when we create
-        // the next iteration (or to the exit for the last
-        // iteration).
+        // the next iteration (or to the final target for the last iteration).
         prevTestBlock = testBlock;
 
-        // update the new value for the unrolled iterator
-
-        switch (iterOper)
+        if (plan.ReplaceIterWithConst && !optAdvanceLoopIter(&lval, iterInc, iterOper, iterOperType))
         {
-            case GT_ADD:
-                lval += iterInc;
-                break;
-
-            case GT_SUB:
-                lval -= iterInc;
-                break;
-
-            default:
-                unreached();
+            unreached();
         }
     }
 
-    // If we get here, we successfully cloned all the blocks in the
-    // unrolled loop. Note we may not have done any cloning at all if
-    // the loop iteration count was computed to be zero. Such loops are
-    // guaranteed to be unreachable since if the repetition count is
-    // zero the loop invariant is false on the first iteration, yet
-    // FlowGraphNaturalLoop::AnalyzeIteration only returns true if the
-    // loop invariant is true on every iteration. That means we have a
-    // guarding check before we enter the loop that will always be
-    // false.
-    optRedirectPrevUnrollIteration(loop, prevTestBlock, exit);
+    if (plan.IsPartialUnroll())
+    {
+        weight_t scaleWeight = 1.0 / plan.UnrollCount;
+        loop->VisitLoopBlocks([=](BasicBlock* block) {
+            block->scaleBBWeight(scaleWeight);
+            return BasicBlockVisit::Continue;
+        });
+    }
 
-    // The old loop body is unreachable now, but we will remove those
-    // blocks after we finish unrolling.
+    if (plan.UseGuardWithTail)
+    {
+        assert(partialGuard != nullptr);
+        assert(firstMainHeader != nullptr);
+        assert(prevTestBlock != nullptr);
+
+        optRedirectPrevUnrollIteration(loop, prevTestBlock, partialGuard, exit, false);
+
+        FlowEdge* const mainEdge = fgAddRefPred(firstMainHeader, partialGuard);
+        FlowEdge* const tailEdge = fgAddRefPred(loop->GetHeader(), partialGuard);
+        partialGuard->SetCond(mainEdge, tailEdge);
+
+        // The guard is expected to select the main unrolled loop most of the
+        // time for loops that pass the profitability checks.
+        mainEdge->setLikelihood(0.90);
+        tailEdge->setLikelihood(0.10);
+
+        JITDUMP("Guard " FMT_BB " true -> main " FMT_BB ", false -> tail " FMT_BB "\n", partialGuard->bbNum,
+                firstMainHeader->bbNum, loop->GetHeader()->bbNum);
+    }
+    else
+    {
+        optRedirectPrevUnrollIteration(loop, prevTestBlock, exit, exit, plan.RemoveLoopTests);
+    }
+
+    // For full unrolling the old loop body is unreachable now, but we will remove those blocks after
+    // we finish unrolling. For partial unrolling the original body remains as the tail loop.
 
 #ifdef DEBUG
     if (verbose)
     {
-        printf("Whole unrolled loop:\n");
+        printf("%s unrolled loop:\n", plan.IsFullUnroll() ? "Fully" : "Partially");
 
-        gtDispTree(iterInfo.InitTree);
-        printf("\n");
-        fgDumpTrees(bottom->Next(), insertAfter);
+        if (iterInfo.HasConstInit)
+        {
+            gtDispTree(iterInfo.InitTree);
+            printf("\n");
+        }
+        if (plan.IsFullUnroll() && (copiesToCreate == 0))
+        {
+            printf("No blocks were created; entries now jump directly to the loop exit.\n");
+        }
+        else
+        {
+            fgDumpTrees(plan.IsFullUnroll() ? bottom->Next() : loop->GetLexicallyTopMostBlock(), insertAfter);
+        }
     }
 #endif // DEBUG
 
@@ -1596,39 +1834,66 @@ bool Compiler::optTryUnrollLoop(FlowGraphNaturalLoop* loop, bool* changedIR)
 //   prevTestBlock - The test block of the previous iteration, or nullptr if
 //                   this is the first unrolled iteration.
 //   target        - The new target for the previous iteration.
-//
+//   exit          - The exit target of the IV test.
+//   removeTest    - Whether to remove the IV test and turn prevTestBlock into
+//                   an unconditional jump.
 //
 // Remarks:
 //   If "prevTestBlock" is nullptr, then the entry edges of the loop are
-//   redirected to the target. Otherwise "prevTestBlock" has its terminating
-//   statement removed and is changed to a BBJ_ALWAYS that goes to the target.
+//   redirected to the target. Otherwise "prevTestBlock"'s continue edge is
+//   redirected to the target. If removeTest is true, the terminating statement
+//   is removed and the block is changed to a BBJ_ALWAYS.
 //
-void Compiler::optRedirectPrevUnrollIteration(FlowGraphNaturalLoop* loop, BasicBlock* prevTestBlock, BasicBlock* target)
+void Compiler::optRedirectPrevUnrollIteration(
+    FlowGraphNaturalLoop* loop, BasicBlock* prevTestBlock, BasicBlock* target, BasicBlock* exit, bool removeTest)
 {
     if (prevTestBlock != nullptr)
     {
         assert(prevTestBlock->KindIs(BBJ_COND));
-        Statement* testCopyStmt = prevTestBlock->lastStmt();
-        GenTree*   testCopyExpr = testCopyStmt->GetRootNode();
-        assert(testCopyExpr->OperIs(GT_JTRUE));
-        GenTree* sideEffList = nullptr;
-        gtExtractSideEffList(testCopyExpr, &sideEffList, GTF_SIDE_EFFECT | GTF_ORDER_SIDEEFF);
-        if (sideEffList == nullptr)
+        assert(prevTestBlock->TrueTargetIs(exit) || prevTestBlock->FalseTargetIs(exit));
+
+        FlowEdge** continueEdgeRef = nullptr;
+        FlowEdge*  exitEdge        = nullptr;
+        if (prevTestBlock->TrueTargetIs(exit))
         {
-            fgRemoveStmt(prevTestBlock, testCopyStmt);
+            continueEdgeRef = &prevTestBlock->FalseEdgeRef();
+            exitEdge        = prevTestBlock->GetTrueEdge();
         }
         else
         {
-            testCopyStmt->SetRootNode(sideEffList);
+            continueEdgeRef = &prevTestBlock->TrueEdgeRef();
+            exitEdge        = prevTestBlock->GetFalseEdge();
         }
 
-        // Redirect exit edge from previous iteration to new entry.
-        fgRedirectEdge(prevTestBlock->TrueEdgeRef(), target);
-        fgRemoveRefPred(prevTestBlock->GetFalseEdge());
-        prevTestBlock->SetKindAndTargetEdge(BBJ_ALWAYS, prevTestBlock->GetTrueEdge());
+        if (removeTest)
+        {
+            Statement* testCopyStmt = prevTestBlock->lastStmt();
+            GenTree*   testCopyExpr = testCopyStmt->GetRootNode();
+            assert(testCopyExpr->OperIs(GT_JTRUE));
+            GenTree* sideEffList = nullptr;
+            gtExtractSideEffList(testCopyExpr, &sideEffList, GTF_SIDE_EFFECT | GTF_ORDER_SIDEEFF);
+            if (sideEffList == nullptr)
+            {
+                fgRemoveStmt(prevTestBlock, testCopyStmt);
+            }
+            else
+            {
+                testCopyStmt->SetRootNode(sideEffList);
+            }
 
-        JITDUMP("Redirecting previously created exiting " FMT_BB " -> " FMT_BB "\n", prevTestBlock->bbNum,
-                target->bbNum);
+            fgRedirectEdge(*continueEdgeRef, target);
+            fgRemoveRefPred(exitEdge);
+            prevTestBlock->SetKindAndTargetEdge(BBJ_ALWAYS, *continueEdgeRef);
+
+            JITDUMP("Redirecting previously created exiting " FMT_BB " -> " FMT_BB " and removing its test\n",
+                    prevTestBlock->bbNum, target->bbNum);
+        }
+        else
+        {
+            fgRedirectEdge(*continueEdgeRef, target);
+            JITDUMP("Redirecting previously created exiting " FMT_BB " -> " FMT_BB " and keeping its test\n",
+                    prevTestBlock->bbNum, target->bbNum);
+        }
     }
     else
     {

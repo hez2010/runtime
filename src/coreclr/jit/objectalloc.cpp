@@ -1683,6 +1683,10 @@ bool ObjectAllocator::MorphAllocObjNodeHelperObj(AllocationCandidate& candidate)
     else
     {
         layout = m_compiler->typGetObjLayout(clsHnd);
+        if ((m_compiler->info.compCompHnd->getClassAttribs(clsHnd) & CORINFO_FLG_DELEGATE) != 0)
+        {
+            layout = GetDelegateLayout(layout);
+        }
         m_compiler->Metrics.StackAllocatedRefClasses++;
     }
 
@@ -2143,8 +2147,22 @@ void ObjectAllocator::AnalyzeParentStack(ArrayStack<GenTree*>* parentStack, unsi
                         break;
                     }
                 }
-                GenTree* const addr = parent->AsIndir()->Addr();
-                if (tree == addr)
+
+                GenTree* addr         = parent->AsIndir()->Addr();
+                bool     areSameLocal = tree == addr;
+                if (!areSameLocal)
+                {
+                    GenTree*       src  = tree;
+                    target_ssize_t offs = 0;
+                    if (src->TypeIs(TYP_I_IMPL, TYP_BYREF, TYP_REF))
+                        m_compiler->gtPeelOffsets(&src, &offs);
+                    if (addr->TypeIs(TYP_I_IMPL, TYP_BYREF, TYP_REF))
+                        m_compiler->gtPeelOffsets(&addr, &offs);
+                    areSameLocal = (src->OperIsAnyLocal() && addr->OperIsAnyLocal() &&
+                                    src->AsLclVarCommon()->GetLclNum() == addr->AsLclVarCommon()->GetLclNum());
+                }
+
+                if (areSameLocal)
                 {
                     if (isAddress)
                     {
@@ -2875,17 +2893,13 @@ void ObjectAllocator::RewriteUses()
                             // Expand the delgate invoke early, so that physical promotion has
                             // a chance to promote the delegate fields.
                             //
-                            // Note the instance field may also be stack allocatable (someday)
-                            //
                             GenTree* const cloneThis      = m_compiler->gtClone(lcl, /* complexOk */ true);
                             unsigned const instanceOffset = m_compiler->eeGetEEInfo()->offsetOfDelegateInstance;
                             GenTree* const newThisAddr =
                                 m_compiler->gtNewOperNode(GT_ADD, TYP_I_IMPL, cloneThis,
                                                           m_compiler->gtNewIconNode(instanceOffset, TYP_I_IMPL));
 
-                            // For now assume the instance field is on the heap...
-                            //
-                            GenTree* const newThis = m_compiler->gtNewIndir(TYP_REF, newThisAddr);
+                            GenTree* const newThis = m_compiler->gtNewIndir(TYP_BYREF, newThisAddr);
                             thisArg->SetEarlyNode(newThis);
 
                             // the control target is
@@ -4949,6 +4963,31 @@ ClassLayout* ObjectAllocator::GetBoxedLayout(ClassLayout* layout)
 
 #ifdef DEBUG
     b.CopyNameFrom(layout, "[boxed] ");
+#endif
+
+    return m_compiler->typGetCustomLayout(b);
+}
+
+//------------------------------------------------------------------------------
+// GetDelegateLayout: get a layout for a stack-allocated delegate.
+//
+// Arguments:
+//   layout - layout of the delegate
+//
+ClassLayout* ObjectAllocator::GetDelegateLayout(ClassLayout* layout)
+{
+    unsigned const instanceOffset = m_compiler->eeGetEEInfo()->offsetOfDelegateInstance;
+    unsigned const instanceSlot   = instanceOffset / TARGET_POINTER_SIZE;
+
+    ClassLayoutBuilder b(m_compiler, layout->GetSize());
+    b.CopyPaddingFrom(0, layout);
+    b.CopyGCInfoFrom(0, layout);
+
+    // Open delegates use the instance field as a self-reference. Retype to byref.
+    b.SetGCPtrType(instanceSlot, TYP_BYREF);
+
+#ifdef DEBUG
+    b.CopyNameFrom(layout, "[delegate] ");
 #endif
 
     return m_compiler->typGetCustomLayout(b);

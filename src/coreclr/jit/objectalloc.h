@@ -301,6 +301,7 @@ private:
     static const unsigned int s_StackAllocMaxSize = 0x2000U;
 
     ClassLayout* GetBoxedLayout(ClassLayout* structLayout);
+    ClassLayout* GetDelegateLayout(ClassLayout* layout);
     ClassLayout* GetNonGCLayout(ClassLayout* existingLayout);
     ClassLayout* GetByrefLayout(ClassLayout* existingLayout);
 

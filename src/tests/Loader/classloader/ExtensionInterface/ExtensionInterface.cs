@@ -4,7 +4,10 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
 
 public static class ExtensionInterfaceTests
 {
@@ -18,10 +21,14 @@ public static class ExtensionInterfaceTests
         BoxedValueTypeUsesTheOriginalBox();
         Console.WriteLine("constraints");
         ConditionalGenericsUseExtensionAwareConstraints();
+        Console.WriteLine("stage2");
+        CanonicalBodiesSupportConstrainedAndStaticCalls();
         Console.WriteLine("coherence");
         CyclesDoNotJustifyThemselvesAndAmbiguityIsStable();
         Console.WriteLine("precedence");
         NominalImplementationsWinAndUnmarkedPairsStayNegative();
+        Console.WriteLine("optimized-stress");
+        OptimizedAndConcurrentPathsRemainCorrect();
         Console.WriteLine("passed");
         return 100;
     }
@@ -150,6 +157,140 @@ public static class ExtensionInterfaceTests
     private sealed class ConstraintHolder<T> where T : ITypeOwned
     {
     }
+
+    public static void CanonicalBodiesSupportConstrainedAndStaticCalls()
+    {
+        Assert.Equal(55, Stage2Calls.DirectReferenceCall(new DevirtualizationTarget(55)));
+        Assert.Throws<NullReferenceException>(() => Stage2Calls.DirectReferenceCall(null!));
+
+        Assert.Equal(11, Stage2Calls.RunValueConstraint());
+        Assert.True(typeof(IValueOwned).IsAssignableFrom(typeof(ValueTarget)));
+        Assert.Equal(typeof(ValueTarget),
+            typeof(ValueConstraintHolder<>).MakeGenericType(typeof(ValueTarget)).GetGenericArguments()[0]);
+
+        Assert.Equal(21, Stage2GenericValueCalls.Run());
+        Type applicableGenericValue = typeof(GenericValueTarget<TypeOwnedTarget>);
+        Assert.True(typeof(IValueOwned).IsAssignableFrom(applicableGenericValue));
+        Assert.Equal(applicableGenericValue,
+            typeof(ValueConstraintHolder<>).MakeGenericType(applicableGenericValue).GetGenericArguments()[0]);
+        Assert.False(typeof(IValueOwned).IsAssignableFrom(typeof(GenericValueTarget<string>)));
+        Assert.Throws<ArgumentException>(() =>
+            typeof(ValueConstraintHolder<>).MakeGenericType(typeof(GenericValueTarget<string>)));
+
+        Assert.Equal(42, Stage2Calls.RunStaticConstraint());
+        Assert.True(typeof(IStaticOwned).IsAssignableFrom(typeof(StaticTarget)));
+        Assert.Equal(typeof(StaticTarget),
+            typeof(StaticConstraintHolder<>).MakeGenericType(typeof(StaticTarget)).GetGenericArguments()[0]);
+
+        Assert.Equal(43, Stage2ReferenceCalls.RunStaticConstraint());
+        Assert.True(typeof(IStaticOwned).IsAssignableFrom(typeof(StaticReferenceTarget)));
+        Assert.Equal(typeof(StaticReferenceTarget),
+            typeof(StaticConstraintHolder<>).MakeGenericType(typeof(StaticReferenceTarget)).GetGenericArguments()[0]);
+    }
+
+    private sealed class ValueConstraintHolder<T> where T : IValueOwned
+    {
+    }
+
+    private sealed class StaticConstraintHolder<T> where T : IStaticOwned
+    {
+    }
+
+    public static void OptimizedAndConcurrentPathsRemainCorrect()
+    {
+        const int Iterations = 1_000_000;
+
+        var devirtualized = new DevirtualizationTarget(7);
+        object boxedValue = new ValueTarget { Value = 0 };
+        IValueOwned boxedView = (IValueOwned)boxedValue;
+        int checksum = 0;
+
+        // This loop is intentionally large enough to exercise optimized Tier 1
+        // code when the test is run with tiering and dynamic PGO enabled.
+        for (int i = 0; i < Iterations; i++)
+        {
+            checksum += Stage2Calls.DirectReferenceCall(devirtualized);
+            checksum += Stage2Calls.RunValueConstraint();
+            checksum += Stage2GenericValueCalls.Run();
+            checksum += Stage2Calls.RunStaticConstraint();
+            checksum += Stage2ReferenceCalls.RunStaticConstraint();
+            boxedView.Increment();
+        }
+
+        Assert.Equal(124_000_000, checksum);
+        Assert.Equal(Iterations, boxedView.GetValue());
+
+        // Warm the exact constrained entries, then prove that the value-type
+        // receiver paths do not allocate a box in steady state.
+        for (int i = 0; i < 100; i++)
+        {
+            GC.KeepAlive(Stage2Calls.RunValueConstraint());
+            GC.KeepAlive(Stage2GenericValueCalls.Run());
+        }
+
+        long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 100_000; i++)
+        {
+            checksum += Stage2Calls.RunValueConstraint();
+            checksum += Stage2GenericValueCalls.Run();
+        }
+        long allocatedAfter = GC.GetAllocatedBytesForCurrentThread();
+        Assert.Equal(0L, allocatedAfter - allocatedBefore);
+
+        // Use pairs not touched by the basic tests so several threads race the
+        // first positive, negative, recursive, and generic-value resolutions.
+        object derived = new DerivedTypeOwnedTarget(29);
+        object conditional = new ConditionalTarget<DerivedTypeOwnedTarget>();
+        object rejectedConditional = new ConditionalTarget<object>();
+        object genericValue = new GenericValueTarget<DerivedTypeOwnedTarget> { Value = 37 };
+        int workerCount = Math.Min(Environment.ProcessorCount, 16);
+        using var start = new Barrier(workerCount);
+        var workers = new Task[workerCount];
+
+        for (int worker = 0; worker < workers.Length; worker++)
+        {
+            workers[worker] = Task.Run(() =>
+            {
+                start.SignalAndWait();
+                for (int iteration = 0; iteration < 10_000; iteration++)
+                {
+                    Assert.True(derived is ITypeOwned);
+                    Assert.Equal(29, ((ITypeOwned)derived).GetValue());
+                    Assert.True(conditional is IConditional);
+                    Assert.Equal(123, ((IConditional)conditional).GetValue());
+                    Assert.False(rejectedConditional is IConditional);
+                    Assert.True(genericValue is IValueOwned);
+                    Assert.Equal(37, ((IValueOwned)genericValue).GetValue());
+                }
+            });
+        }
+
+        Task.WaitAll(workers);
+
+        // Exercise multiple exact instantiations of the shared generic
+        // constrained path. Closing the methods itself validates the extension
+        // interface constraints.
+        VerifyConstrainedValueInstantiation(new ValueTarget { Value = 41 }, 42);
+        VerifyConstrainedValueInstantiation(new GenericValueTarget<TypeOwnedTarget> { Value = 42 }, 43);
+        VerifyConstrainedValueInstantiation(new GenericValueTarget<DerivedTypeOwnedTarget> { Value = 43 }, 44);
+    }
+
+    private delegate void RefAction<T>(ref T value);
+
+    private static void VerifyConstrainedValueInstantiation<T>(T value, int expected)
+    {
+        MethodInfo method = typeof(ExtensionInterfaceTests)
+            .GetMethod(nameof(IncrementThroughConstraint), BindingFlags.NonPublic | BindingFlags.Static)!
+            .MakeGenericMethod(typeof(T));
+        var increment = (RefAction<T>)method.CreateDelegate(typeof(RefAction<T>));
+        increment(ref value);
+
+        object boxed = value!;
+        Assert.Equal(expected, ((IValueOwned)boxed).GetValue());
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void IncrementThroughConstraint<T>(ref T value) where T : IValueOwned => value.Increment();
 
     public static void CyclesDoNotJustifyThemselvesAndAmbiguityIsStable()
     {

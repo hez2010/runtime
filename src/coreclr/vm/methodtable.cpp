@@ -8514,6 +8514,34 @@ MethodTable::TryResolveConstraintMethodApprox(
         GC_TRIGGERS;
     } CONTRACTL_END;
 
+    if (pInterfaceMD->IsInterface() && (IsValueType() || pInterfaceMD->IsStatic()))
+    {
+        MethodDesc* pCanonicalBodyMD;
+        if (ExtensionInterface::TryResolveCanonicalBody(
+                this,
+                thInterfaceType.AsMethodTable(),
+                pInterfaceMD,
+                &pCanonicalBodyMD))
+        {
+            return pCanonicalBodyMD;
+        }
+
+        if (pfForceUseRuntimeLookup != nullptr &&
+            ExtensionInterface::TryResolveCanonicalBodyApprox(
+                this,
+                thInterfaceType.AsMethodTable(),
+                pInterfaceMD,
+                &pCanonicalBodyMD))
+        {
+            // A canonical value-type instantiation does not contain the exact
+            // arguments needed to evaluate conditional witness constraints. Use
+            // the canonical body only for its ABI and resolve the exact entry in
+            // the existing constrained-method dictionary at runtime.
+            *pfForceUseRuntimeLookup = TRUE;
+            return pCanonicalBodyMD;
+        }
+    }
+
     if (pInterfaceMD->IsStatic())
     {
         _ASSERTE(!thInterfaceType.IsTypeDesc());

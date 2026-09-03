@@ -30,6 +30,7 @@
 #include "virtualcallstub.h"
 #include "sigbuilder.h"
 #include "dllimport.h"
+#include "extensioninterfaceimpl.h"
 
 #ifndef DACCESS_COMPILE
 
@@ -1148,31 +1149,47 @@ Dictionary::PopulateEntry(
 
                 if (pMethod->IsStatic())
                 {
-                    // Virtual Static Method resolution
-                    _ASSERTE(!ownerType.IsTypeDesc());
-                    _ASSERTE(ownerType.IsInterface());
-                    BOOL uniqueResolution;
-                    pResolvedMD = constraintType.GetMethodTable()->ResolveVirtualStaticMethod(
-                        ownerType.GetMethodTable(),
-                        pMethod,
-                        ResolveVirtualStaticMethodFlags::AllowNullResult |
-                        ResolveVirtualStaticMethodFlags::AllowVariantMatches |
-                        ResolveVirtualStaticMethodFlags::InstantiateResultOverFinalMethodDesc,
-                        &uniqueResolution);
-
-                    // If we couldn't get an exact result, fall back to using a stub to make the exact function call
-                    // This will trigger the logic in the JIT which can handle AmbiguousImplementationException and
-                    // EntryPointNotFoundException at exactly the right time
-                    if (!uniqueResolution || pResolvedMD == NULL || pResolvedMD->IsAbstract())
+                    pResolvedMD = nullptr;
+                    if (!ExtensionInterface::TryResolveCanonicalBody(
+                            constraintType.GetMethodTable(),
+                            ownerType.GetMethodTable(),
+                            pMethod,
+                            &pResolvedMD))
                     {
-                        _ASSERTE(pResolvedMD == NULL || pResolvedMD->IsStatic());
-                        result = (CORINFO_GENERIC_HANDLE)CreateStubForStaticVirtualDispatch(constraintType.GetMethodTable(), ownerType.GetMethodTable(), pMethod);
-                        break;
+                        // Virtual Static Method resolution
+                        _ASSERTE(!ownerType.IsTypeDesc());
+                        _ASSERTE(ownerType.IsInterface());
+                        BOOL uniqueResolution;
+                        pResolvedMD = constraintType.GetMethodTable()->ResolveVirtualStaticMethod(
+                            ownerType.GetMethodTable(),
+                            pMethod,
+                            ResolveVirtualStaticMethodFlags::AllowNullResult |
+                            ResolveVirtualStaticMethodFlags::AllowVariantMatches |
+                            ResolveVirtualStaticMethodFlags::InstantiateResultOverFinalMethodDesc,
+                            &uniqueResolution);
+
+                        // If we couldn't get an exact result, fall back to using a stub to make the exact function call
+                        // This will trigger the logic in the JIT which can handle AmbiguousImplementationException and
+                        // EntryPointNotFoundException at exactly the right time
+                        if (!uniqueResolution || pResolvedMD == NULL || pResolvedMD->IsAbstract())
+                        {
+                            _ASSERTE(pResolvedMD == NULL || pResolvedMD->IsStatic());
+                            result = (CORINFO_GENERIC_HANDLE)CreateStubForStaticVirtualDispatch(constraintType.GetMethodTable(), ownerType.GetMethodTable(), pMethod);
+                            break;
+                        }
                     }
                 }
                 else
                 {
-                    pResolvedMD = constraintType.GetMethodTable()->TryResolveConstraintMethodApprox(ownerType, pMethod);
+                    if (!constraintType.IsValueType() ||
+                        !ExtensionInterface::TryResolveCanonicalBody(
+                            constraintType.GetMethodTable(),
+                            ownerType.GetMethodTable(),
+                            pMethod,
+                            &pResolvedMD))
+                    {
+                        pResolvedMD = constraintType.GetMethodTable()->TryResolveConstraintMethodApprox(ownerType, pMethod);
+                    }
 
                     // All such calls should be resolvable.  If not then for now just throw an error.
                     _ASSERTE(pResolvedMD);
@@ -1213,6 +1230,10 @@ Dictionary::PopulateEntry(
                 }
 #endif
 
+                // An instance extension canonical body receives the constrained byref in
+                // the same managed ABI position as the original this argument. A callable
+                // instantiating stub is selected by GetMultiCallableAddrOfCode when the
+                // closed witness body needs hidden generic context; neither form boxes.
                 result = (CORINFO_GENERIC_HANDLE)pResolvedMD->GetMultiCallableAddrOfCode();
             }
             else

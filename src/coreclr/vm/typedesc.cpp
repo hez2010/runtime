@@ -1666,19 +1666,17 @@ BOOL TypeVarTypeDesc::SatisfiesConstraints(SigTypeContext *pTypeContextOfConstra
                 {
                     // if a concrete type can be cast to the constraint, then this constraint will be satisfied
                     bool satisfiesConstraint = thElem.CanCastTo(thConstraint);
-                    // Reference-type instance dispatch can use the witness adapter directly. Value-type
-                    // constrained calls and static virtual dispatch require the canonical-body manifest.
+                    bool satisfiesThroughExtension = false;
                     if (!satisfiesConstraint &&
                         thConstraint.IsInterface() &&
-                        !thConstraint.AsMethodTable()->HasVirtualStaticMethods() &&
-                        !thElem.IsTypeDesc() &&
-                        !thElem.IsValueType())
+                        !thElem.IsTypeDesc())
                     {
                         MethodTable* pWitnessMT;
-                        satisfiesConstraint = ExtensionInterface::TryResolve(
+                        satisfiesThroughExtension = ExtensionInterface::TryResolve(
                             thElem.AsMethodTable(),
                             thConstraint.AsMethodTable(),
                             &pWitnessMT);
+                        satisfiesConstraint = satisfiesThroughExtension;
                     }
 
                     if (satisfiesConstraint)
@@ -1690,6 +1688,7 @@ BOOL TypeVarTypeDesc::SatisfiesConstraints(SigTypeContext *pTypeContextOfConstra
                         // do not hold the correct detail for checking, and do not need to do so. This constraint rule
                         // is only applicable for generic arguments which have been specialized to some extent
                         if (!thArg.IsGenericVariable() &&
+                            !satisfiesThroughExtension &&
                             !thElem.IsTypeDesc() &&
                             thElem.AsMethodTable()->IsAbstract() &&
                             thConstraint.IsInterface() &&

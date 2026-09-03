@@ -40,6 +40,7 @@
 #include "typestring.h"
 #include "typedesc.h"
 #include "genericdict.h"
+#include "extensioninterfaceimpl.h"
 #include "array.h"
 #include "debuginfostore.h"
 #include "safemath.h"
@@ -5083,6 +5084,7 @@ void CEEInfo::getCallInfo(
     BOOL fIsStaticVirtualMethod = (pConstrainedResolvedToken != NULL && pMD->IsInterface() && pMD->IsStatic());
 
     BOOL fResolvedConstraint = FALSE;
+    BOOL fResolvedToExtensionCanonicalBody = FALSE;
     BOOL fForceUseRuntimeLookup = FALSE;
     BOOL fAbstractSVM = FALSE;
 
@@ -5153,7 +5155,8 @@ void CEEInfo::getCallInfo(
             &fForceUseRuntimeLookup);
         if (directMethod
 #ifdef FEATURE_DEFAULT_INTERFACES
-            && !directMethod->IsInterface() /* Could be a default interface method implementation */
+            && (!directMethod->IsInterface() ||
+                (!pMD->IsStatic() && directMethod->IsStatic())) /* Could be a default interface method implementation */
 #endif
             )
         {
@@ -5163,11 +5166,17 @@ void CEEInfo::getCallInfo(
             // OR 3. we have resolved to an instantiating stub
 
             pMDAfterConstraintResolution = directMethod;
-            _ASSERTE(!pMDAfterConstraintResolution->IsInterface());
+            fResolvedToExtensionCanonicalBody =
+                pMDAfterConstraintResolution->IsInterface() &&
+                !pMD->IsStatic() &&
+                pMDAfterConstraintResolution->IsStatic();
+            _ASSERTE(!pMDAfterConstraintResolution->IsInterface() || fResolvedToExtensionCanonicalBody);
             fResolvedConstraint = TRUE;
             pResult->thisTransform = CORINFO_NO_THIS_TRANSFORM;
 
-            exactType = constrainedType;
+            exactType = fResolvedToExtensionCanonicalBody
+                ? TypeHandle(pMDAfterConstraintResolution->GetMethodTable())
+                : constrainedType;
         }
 #ifdef FEATURE_DEFAULT_INTERFACES
         else if (directMethod && pMD->IsStatic())
@@ -8765,6 +8774,7 @@ bool CEEInfo::resolveVirtualMethodHelper(CORINFO_DEVIRTUALIZATION_INFO * info)
 
     if (pBaseMT->IsInterface())
     {
+        bool isExtensionInterfaceDevirtualization = false;
 
 #ifdef FEATURE_COMINTEROP
         // Don't try and devirtualize com interface calls.
@@ -8812,13 +8822,29 @@ bool CEEInfo::resolveVirtualMethodHelper(CORINFO_DEVIRTUALIZATION_INFO * info)
         }
         else if (!pBaseMT->IsSharedByGenericInstantiations() && !pObjMT->CanCastToInterface(pBaseMT))
         {
-            info->detail = CORINFO_DEVIRTUALIZATION_FAILED_CAST;
-            return false;
+            if (!pObjMT->IsValueType() &&
+                ExtensionInterface::TryResolveCanonicalBody(
+                    pObjMT,
+                    pBaseMT,
+                    pBaseMD,
+                    &pDevirtMD))
+            {
+                isExtensionInterfaceDevirtualization = true;
+            }
+            else
+            {
+                info->detail = CORINFO_DEVIRTUALIZATION_FAILED_CAST;
+                return false;
+            }
         }
 
         // For generic interface methods we must have context to
         // safely devirtualize.
-        if (info->context != nullptr)
+        if (isExtensionInterfaceDevirtualization)
+        {
+            _ASSERTE(pDevirtMD != nullptr && pDevirtMD->IsStatic());
+        }
+        else if (info->context != nullptr)
         {
             MethodTable* interfaceMT = nullptr;
 

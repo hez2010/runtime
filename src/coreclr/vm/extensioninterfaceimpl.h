@@ -5,6 +5,7 @@
 #define _EXTENSIONINTERFACEIMPL_H_
 
 class MethodTable;
+class MethodDesc;
 
 namespace ExtensionInterface
 {
@@ -19,6 +20,23 @@ namespace ExtensionInterface
     // Returns the closed witness interface for an extension implementation. Nominal
     // implementations are deliberately not returned by this operation.
     bool TryResolve(MethodTable* pReceiverMT, MethodTable* pInterfaceMT, MethodTable** ppWitnessMT);
+
+    // Returns the canonical static body associated with an interface member. The
+    // body has an explicit receiver argument for instance interface members.
+    bool TryResolveCanonicalBody(
+        MethodTable* pReceiverMT,
+        MethodTable* pInterfaceMT,
+        MethodDesc* pInterfaceMD,
+        MethodDesc** ppBodyMD);
+
+    // Returns an ABI-compatible canonical body for shared generic code. This
+    // ignores witness constraints because the exact dictionary instantiation
+    // validates and resolves the pair before publishing its entry point.
+    bool TryResolveCanonicalBodyApprox(
+        MethodTable* pReceiverMT,
+        MethodTable* pInterfaceMT,
+        MethodDesc* pInterfaceMD,
+        MethodDesc** ppBodyMD);
 }
 
 #endif // _EXTENSIONINTERFACEIMPL_H_

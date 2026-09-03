@@ -385,6 +385,15 @@ var_types Compiler::impImportCall(OPCODE                  opcode,
 
         mflags = callInfo->methodFlags;
 
+        if ((pConstrainedResolvedToken != nullptr) && (opcode == CEE_CALLVIRT) &&
+            ((mflags & CORINFO_FLG_STATIC) != 0) && ((sig->callConv & CORINFO_CALLCONV_HASTHIS) == 0))
+        {
+            // The EE resolved an instance interface call to an extension-interface
+            // canonical body. Its original managed this is the static body's first
+            // explicit receiver argument.
+            opcode = CEE_CALL;
+        }
+
 #ifdef DEBUG
         if (verbose)
         {
@@ -10187,6 +10196,8 @@ void Compiler::impTransformDevirtualizedCall(GenTreeCall*            call,
     CORINFO_RESOLVED_TOKEN* pDerivedResolvedToken = dcInfo->pResolvedToken;
     CORINFO_CLASS_HANDLE    derivedClass          = eeGetClassFromContext(dcInfo->tokenLookupContext);
 
+    const bool isExtensionCanonicalBody = (derivedMethodAttribs & CORINFO_FLG_STATIC) != 0;
+
     assert(derivedMethod != nullptr);
     assert(call->gtArgs.HasThisPointer());
 
@@ -10239,6 +10250,32 @@ void Compiler::impTransformDevirtualizedCall(GenTreeCall*            call,
         call->gtFlags |= GTF_CALL_NULLCHECK;
     }
 
+    // An extension-interface canonical body is static and represents the original
+    // receiver as its first explicit argument. Reclassify the existing interface
+    // this argument without changing its evaluation order or null semantics.
+    if (isExtensionCanonicalBody)
+    {
+        GenTree*  receiver              = thisArg->GetEarlyNode();
+        var_types receiverSignatureType = thisArg->GetSignatureType();
+
+        if (call->NeedsNullCheck())
+        {
+            unsigned receiverTemp    = lvaGrabTemp(true DEBUGARG("extension interface receiver"));
+            GenTree* storeReceiver   = gtNewTempStore(receiverTemp, receiver);
+            GenTree* nullCheck       = gtNewNullCheck(gtNewLclvNode(receiverTemp, receiver->TypeGet()));
+            GenTree* receiverValue   = gtNewLclvNode(receiverTemp, receiver->TypeGet());
+            GenTree* checkedReceiver = gtNewOperNode(GT_COMMA, receiver->TypeGet(), nullCheck, receiverValue);
+            receiver                 = gtNewOperNode(GT_COMMA, receiver->TypeGet(), storeReceiver, checkedReceiver);
+            gtUpdateNodeSideEffects(receiver);
+            call->gtFlags &= ~GTF_CALL_NULLCHECK;
+        }
+
+        call->gtArgs.Remove(thisArg);
+        call->gtArgs.PushFront(this, NewCallArg::Primitive(receiver, receiverSignatureType));
+        call->gtFlags |= receiver->gtFlags & GTF_ALL_EFFECT;
+        JITDUMP("Reclassified extension interface receiver as canonical body argument\n");
+    }
+
     // Clear the inline candidate info (may be non-null since
     // it's a union field used for other things by virtual
     // stubs)
@@ -10254,7 +10291,8 @@ void Compiler::impTransformDevirtualizedCall(GenTreeCall*            call,
     // If method is an inlinee we may be specializing to a class that wasn't seen at runtime.
     //
     const bool canSensiblyCheck = (dcInfo->objClassIsExact || dcInfo->objClassIsFinal) &&
-                                  (fgPgoSource == ICorJitInfo::PgoSource::Dynamic) && !compIsForInlining();
+                                  (fgPgoSource == ICorJitInfo::PgoSource::Dynamic) && !compIsForInlining() &&
+                                  !isExtensionCanonicalBody;
     if (JitConfig.JitCrossCheckDevirtualizationAndPGO() && canSensiblyCheck)
     {
         // We only can handle a single likely class for now

@@ -23,6 +23,7 @@
 #include "corprof.h"
 #include "eeprofinterfaces.h"
 #include "dynamicinterfacecastable.h"
+#include "extensioninterfaceimpl.h"
 #include "comsynchronizable.h"
 
 #ifndef TARGET_UNIX
@@ -427,18 +428,40 @@ static BOOL ObjIsInstanceOfCore(Object *pObject, TypeHandle toTypeHnd, BOOL thro
     }
     else if (toTypeHnd.IsInterface())
     {
+        MethodTable* pInterfaceMT = toTypeHnd.AsMethodTable();
+        bool extensionSensitive = ExtensionInterface::IsExtensionSensitive(pMT, pInterfaceMT);
+        if (extensionSensitive)
+        {
+            MethodTable* pWitnessMT;
+            if (ExtensionInterface::TryResolve(pMT, pInterfaceMT, &pWitnessMT))
+            {
+                fCast = TRUE;
+                CastCache::TryAddToCache(pMT, pInterfaceMT, TRUE);
+            }
+        }
+
 #ifdef FEATURE_COMINTEROP
         // If we are casting a COM object from interface then we need to do a check to see
         // if it implements the interface.
-        if (pMT->IsComObjectType())
+        if (!fCast && pMT->IsComObjectType())
         {
-            fCast = ComObject::SupportsInterface(obj, toTypeHnd.AsMethodTable());
+            fCast = ComObject::SupportsInterface(obj, pInterfaceMT);
         }
         else
 #endif // FEATURE_COMINTEROP
-        if (pMT->IsIDynamicInterfaceCastable())
+        if (!fCast && pMT->IsIDynamicInterfaceCastable())
         {
             fCast = DynamicInterfaceCastable::IsInstanceOf(&obj, toTypeHnd, throwCastException);
+        }
+
+        if (!fCast && extensionSensitive &&
+            !pMT->IsIDynamicInterfaceCastable()
+#ifdef FEATURE_COMINTEROP
+            && !pMT->IsComObjectType()
+#endif
+            )
+        {
+            CastCache::TryAddToCache(pMT, pInterfaceMT, FALSE);
         }
     }
 

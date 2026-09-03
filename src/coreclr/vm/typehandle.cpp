@@ -626,6 +626,17 @@ BOOL TypeHandle::IsBoxedAndCanCastTo(TypeHandle type, TypeHandlePairList *pPairL
 // involved is in its boxed form. See IsBoxedAndCanCastTo() if the valuetype
 // is not guaranteed to be in its boxed form.
 
+static bool IsExtensionInterfacePair(TypeHandle sourceType, TypeHandle targetType)
+{
+    LIMITED_METHOD_CONTRACT;
+
+    return !sourceType.IsTypeDesc() &&
+        !targetType.IsTypeDesc() &&
+        targetType.IsInterface() &&
+        (sourceType.AsMethodTable()->HasTypeOwnedExtensionImpls() ||
+         targetType.AsMethodTable()->HasInterfaceOwnedExtensionImpls());
+}
+
 BOOL TypeHandle::CanCastTo(TypeHandle type, TypeHandlePairList *pVisited)  const
 {
     CONTRACTL
@@ -647,10 +658,13 @@ BOOL TypeHandle::CanCastTo(TypeHandle type, TypeHandlePairList *pVisited)  const
     {
         GCX_COOP();
 
-        TypeHandle::CastResult result = CastCache::TryGetFromCache(*this, type);
-        if (result != TypeHandle::MaybeCast)
+        if (!IsExtensionInterfacePair(*this, type))
         {
-            return (BOOL)result;
+            TypeHandle::CastResult result = CastCache::TryGetFromCache(*this, type);
+            if (result != TypeHandle::MaybeCast)
+            {
+                return (BOOL)result;
+            }
         }
 
         if (IsTypeDesc())
@@ -686,7 +700,9 @@ TypeHandle::CastResult TypeHandle::CanCastToCached(TypeHandle type)  const
     if (!IsTypeDesc() && type.IsTypeDesc())
         return CannotCast;
 
-    return CastCache::TryGetFromCache(*this, type);
+    return IsExtensionInterfacePair(*this, type)
+        ? MaybeCast
+        : CastCache::TryGetFromCache(*this, type);
 }
 #include <optdefault.h>
 

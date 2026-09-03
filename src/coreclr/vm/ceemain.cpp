@@ -116,6 +116,7 @@
 //     boxing this describes this feature.
 
 #include "common.h"
+#include "extensioninterfaceimpl.h"
 
 #include "vars.hpp"
 #include "log.h"
@@ -682,6 +683,7 @@ void EEStartupHelper()
 
         OnStackReplacementManager::StaticInitialize();
         MethodTable::InitMethodDataCache();
+        ExtensionInterface::Initialize();
 
         InitializePregeneratedStringThunkHash();
 

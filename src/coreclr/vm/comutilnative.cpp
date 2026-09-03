@@ -17,10 +17,12 @@
 **
 ===========================================================*/
 #include "common.h"
+#include "castcache.h"
 #include "object.h"
 #include "excep.h"
 #include "vars.hpp"
 #include "comutilnative.h"
+#include "extensioninterfaceimpl.h"
 
 #include "utilcode.h"
 #include "frames.h"
@@ -2058,7 +2060,27 @@ extern "C" BOOL QCALLTYPE TypeHandle_CanCastTo_NoCacheLookup(void* fromTypeHnd, 
     }
     else
     {
-        ret = fromTH.AsMethodTable()->CanCastTo(toTH.AsMethodTable(), NULL);
+        MethodTable* pFromMT = fromTH.AsMethodTable();
+        MethodTable* pToMT = toTH.AsMethodTable();
+        ret = pFromMT->CanCastTo(pToMT, NULL);
+
+        if (!ret && pToMT->IsInterface() && ExtensionInterface::IsExtensionSensitive(pFromMT, pToMT))
+        {
+            MethodTable* pWitnessMT;
+            ret = ExtensionInterface::TryResolve(pFromMT, pToMT, &pWitnessMT);
+            if (ret)
+            {
+                CastCache::TryAddToCache(pFromMT, pToMT, TRUE);
+            }
+            else if (!pFromMT->IsIDynamicInterfaceCastable()
+#ifdef FEATURE_COMINTEROP
+                     && !pFromMT->IsComObjectType()
+#endif
+                     )
+            {
+                CastCache::TryAddToCache(pFromMT, pToMT, FALSE);
+            }
+        }
     }
 
     END_QCALL;

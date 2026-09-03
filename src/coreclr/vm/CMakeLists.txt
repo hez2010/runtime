@@ -333,6 +333,7 @@ set(VM_SOURCES_WKS
     eepolicy.cpp
     eetoprofinterfaceimpl.cpp
     eventpipeinternal.cpp
+    extensioninterfaceimpl.cpp
     fcall.cpp
     fieldmarshaler.cpp
     finalizerthread.cpp
@@ -450,6 +451,7 @@ set(VM_HEADERS_WKS
     eventpipeadapter.h
     eventpipeadaptertypes.h
     eventpipeinternal.h
+    extensioninterfaceimpl.h
     fcall.h
     fieldmarshaler.h
     finalizerthread.h

@@ -1,0 +1,1221 @@
+// Licensed to the .NET Foundation under one or more agreements.
+// The .NET Foundation licenses this file to you under the MIT license.
+
+#include "common.h"
+#include "extensioninterfaceimpl.h"
+
+#include "caparser.h"
+#include "clsload.hpp"
+#include "typedesc.h"
+
+// Prototype metadata encoding. Each module-level ExtensionInterfaceImplAttribute
+// contains the fixed arguments below. Target and contract are ordinary CLI type
+// signatures interpreted in the witness type's generic context. The attribute is
+// replaced by the ExtensionInterfaceImpl table when standard table numbers exist.
+//
+//   int32 ownerTypeDef
+//   int32 implementationTypeDef
+//   byte[] target
+//   byte[] contract
+//   uint16 flags
+
+namespace
+{
+    enum ExtensionInterfaceImplFlags : UINT16
+    {
+        ExtensionInterfaceImpl_TypeOwned = 0x0001,
+        ExtensionInterfaceImpl_InterfaceOwned = 0x0002,
+    };
+
+    struct ManifestRow
+    {
+        mdTypeDef owner;
+        mdTypeDef implementation;
+        CQuickBytes targetSignature;
+        ULONG targetSignatureSize;
+        CQuickBytes interfaceSignature;
+        ULONG interfaceSignatureSize;
+        UINT16 flags;
+    };
+
+    [[noreturn]] void ThrowInvalidManifest()
+    {
+        COMPlusThrow(kTypeLoadException, IDS_CLASSLOAD_BADFORMAT);
+    }
+
+    void ReadByteArray(CustomAttributeParser* pParser, CQuickBytes* pBuffer, ULONG* pSize)
+    {
+        UINT32 size;
+        if (FAILED(pParser->GetU4(&size)) || size == UINT32_MAX || size > static_cast<UINT32>(pParser->BytesLeft()))
+        {
+            ThrowInvalidManifest();
+        }
+
+        BYTE* pBytes = static_cast<BYTE*>(pBuffer->AllocThrows(size));
+        for (UINT32 i = 0; i < size; i++)
+        {
+            if (FAILED(pParser->GetU1(&pBytes[i])))
+            {
+                ThrowInvalidManifest();
+            }
+        }
+
+        *pSize = size;
+    }
+
+    void ValidateTypeSignature(const CQuickBytes& signature, ULONG signatureSize)
+    {
+        SigParser parser(static_cast<PCCOR_SIGNATURE>(signature.Ptr()), signatureSize);
+        if (FAILED(parser.SkipExactlyOne()))
+        {
+            ThrowInvalidManifest();
+        }
+
+        PCCOR_SIGNATURE remainingSignature;
+        UINT32 remainingSize;
+        parser.GetSignature(&remainingSignature, &remainingSize);
+        if (remainingSize != 0)
+        {
+            ThrowInvalidManifest();
+        }
+    }
+
+    void ParseManifestRow(const void* pBlob, ULONG blobSize, ManifestRow* pRow)
+    {
+        CustomAttributeParser parser(pBlob, blobSize);
+        INT32 owner;
+        INT32 implementation;
+        UINT16 namedArgumentCount;
+
+        if (FAILED(parser.ValidateProlog()) ||
+            FAILED(parser.GetI4(&owner)) ||
+            FAILED(parser.GetI4(&implementation)))
+        {
+            ThrowInvalidManifest();
+        }
+
+        pRow->owner = static_cast<mdTypeDef>(owner);
+        pRow->implementation = static_cast<mdTypeDef>(implementation);
+        ReadByteArray(&parser, &pRow->targetSignature, &pRow->targetSignatureSize);
+        ReadByteArray(&parser, &pRow->interfaceSignature, &pRow->interfaceSignatureSize);
+        ValidateTypeSignature(pRow->targetSignature, pRow->targetSignatureSize);
+        ValidateTypeSignature(pRow->interfaceSignature, pRow->interfaceSignatureSize);
+
+        if (FAILED(parser.GetU2(&pRow->flags)) ||
+            FAILED(parser.GetU2(&namedArgumentCount)) ||
+            namedArgumentCount != 0 ||
+            parser.BytesLeft() != 0 ||
+            TypeFromToken(pRow->owner) != mdtTypeDef ||
+            IsNilToken(pRow->owner) ||
+            TypeFromToken(pRow->implementation) != mdtTypeDef ||
+            IsNilToken(pRow->implementation) ||
+            (pRow->flags != ExtensionInterfaceImpl_TypeOwned &&
+             pRow->flags != ExtensionInterfaceImpl_InterfaceOwned))
+        {
+            ThrowInvalidManifest();
+        }
+    }
+
+    template <typename TAction>
+    void ForEachManifestRow(Module* pModule, TAction action)
+    {
+        CONTRACTL
+        {
+            THROWS;
+            GC_TRIGGERS;
+            MODE_ANY;
+        }
+        CONTRACTL_END;
+
+        if (!pModule->HasExtensionInterfaceImplementations())
+        {
+            return;
+        }
+
+        IMDInternalImport* pImport = pModule->GetMDImport();
+        MDEnumHolder hEnum(pImport);
+        HRESULT hr = pImport->EnumCustomAttributeByNameInit(
+            TokenFromRid(1, mdtModule),
+            g_ExtensionInterfaceImplAttribute,
+            &hEnum);
+        IfFailThrow(hr);
+
+        mdCustomAttribute attribute;
+        while (pImport->EnumNext(&hEnum, &attribute))
+        {
+            const void* pBlob;
+            ULONG blobSize;
+            IfFailThrow(pImport->GetCustomAttributeAsBlob(attribute, &pBlob, &blobSize));
+
+            ManifestRow row;
+            ParseManifestRow(pBlob, blobSize, &row);
+
+            DWORD ownerAttributes;
+            DWORD implementationAttributes;
+            if (!pImport->IsValidToken(row.owner) ||
+                !pImport->IsValidToken(row.implementation) ||
+                FAILED(pImport->GetTypeDefProps(row.owner, &ownerAttributes, NULL)) ||
+                FAILED(pImport->GetTypeDefProps(row.implementation, &implementationAttributes, NULL)) ||
+                !IsTdInterface(implementationAttributes) ||
+                (row.flags == ExtensionInterfaceImpl_InterfaceOwned && !IsTdInterface(ownerAttributes)))
+            {
+                ThrowInvalidManifest();
+            }
+
+            action(row);
+        }
+    }
+
+    bool TryGetLocalTypeDefFromSignature(Module* pModule, mdToken token, mdTypeDef* pTypeDef)
+    {
+        LIMITED_METHOD_CONTRACT;
+
+        if (TypeFromToken(token) == mdtTypeDef)
+        {
+            *pTypeDef = static_cast<mdTypeDef>(token);
+            return true;
+        }
+
+        if (TypeFromToken(token) != mdtTypeSpec)
+        {
+            return false;
+        }
+
+        PCCOR_SIGNATURE pSignature;
+        ULONG signatureSize;
+        if (FAILED(pModule->GetMDImport()->GetSigFromToken(token, &signatureSize, &pSignature)))
+        {
+            return false;
+        }
+
+        SigParser parser(pSignature, signatureSize);
+        CorElementType elementType;
+        if (FAILED(parser.GetElemType(&elementType)))
+        {
+            return false;
+        }
+
+        if (elementType == ELEMENT_TYPE_GENERICINST && FAILED(parser.GetElemType(&elementType)))
+        {
+            return false;
+        }
+
+        if (elementType != ELEMENT_TYPE_CLASS && elementType != ELEMENT_TYPE_VALUETYPE)
+        {
+            return false;
+        }
+
+        mdToken rootToken;
+        if (FAILED(parser.GetToken(&rootToken)) || TypeFromToken(rootToken) != mdtTypeDef)
+        {
+            return false;
+        }
+
+        *pTypeDef = static_cast<mdTypeDef>(rootToken);
+        return true;
+    }
+
+    bool InterfaceDefinitionExtends(Module* pModule, mdTypeDef interfaceType, mdTypeDef baseInterfaceType, UINT32 depth = 0)
+    {
+        WRAPPER_NO_CONTRACT;
+
+        if (interfaceType == baseInterfaceType)
+        {
+            return true;
+        }
+
+        if (depth == 64)
+        {
+            return false;
+        }
+
+        IMDInternalImport* pImport = pModule->GetMDImport();
+        HENUMInternalHolder hEnum(pImport);
+        hEnum.EnumInit(mdtInterfaceImpl, interfaceType);
+
+        mdInterfaceImpl interfaceImpl;
+        while (pImport->EnumNext(&hEnum, &interfaceImpl))
+        {
+            mdToken implementedInterface;
+            if (FAILED(pImport->GetTypeOfInterfaceImpl(interfaceImpl, &implementedInterface)))
+            {
+                continue;
+            }
+
+            mdTypeDef implementedInterfaceTypeDef;
+            if (TryGetLocalTypeDefFromSignature(pModule, implementedInterface, &implementedInterfaceTypeDef) &&
+                InterfaceDefinitionExtends(pModule, implementedInterfaceTypeDef, baseInterfaceType, depth + 1))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    enum class SignatureRootKind
+    {
+        Invalid,
+        TypeVariable,
+        Nominal,
+    };
+
+    SignatureRootKind GetSignatureRoot(
+        Module* pModule,
+        PCCOR_SIGNATURE pSignature,
+        ULONG signatureSize,
+        TypeHandle* pRootType,
+        UINT32* pTypeVariableIndex = nullptr)
+    {
+        CONTRACTL
+        {
+            THROWS;
+            GC_TRIGGERS;
+            MODE_ANY;
+        }
+        CONTRACTL_END;
+
+        SigParser parser(pSignature, signatureSize);
+        CorElementType elementType;
+        if (FAILED(parser.GetElemType(&elementType)))
+        {
+            ThrowInvalidManifest();
+        }
+
+        if (elementType == ELEMENT_TYPE_VAR)
+        {
+            UINT32 index;
+            if (FAILED(parser.GetData(&index)))
+            {
+                ThrowInvalidManifest();
+            }
+
+            if (pTypeVariableIndex != nullptr)
+            {
+                *pTypeVariableIndex = index;
+            }
+            return SignatureRootKind::TypeVariable;
+        }
+
+        if (elementType == ELEMENT_TYPE_GENERICINST && FAILED(parser.GetElemType(&elementType)))
+        {
+            ThrowInvalidManifest();
+        }
+
+        if (elementType != ELEMENT_TYPE_CLASS && elementType != ELEMENT_TYPE_VALUETYPE)
+        {
+            return SignatureRootKind::Invalid;
+        }
+
+        mdToken token;
+        if (FAILED(parser.GetToken(&token)))
+        {
+            ThrowInvalidManifest();
+        }
+
+        *pRootType = ClassLoader::LoadTypeDefOrRefThrowing(
+            pModule,
+            token,
+            ClassLoader::ThrowIfNotFound,
+            ClassLoader::PermitUninstDefOrRef);
+        return SignatureRootKind::Nominal;
+    }
+
+    bool MatchType(
+        SigParser* pPattern,
+        Module* pModule,
+        TypeHandle actualType,
+        TypeHandle* pBindings,
+        UINT32 bindingCount)
+    {
+        CONTRACTL
+        {
+            THROWS;
+            GC_TRIGGERS;
+            MODE_ANY;
+        }
+        CONTRACTL_END;
+
+        CorElementType elementType;
+        if (FAILED(pPattern->GetElemType(&elementType)))
+        {
+            ThrowInvalidManifest();
+        }
+
+        switch (elementType)
+        {
+            case ELEMENT_TYPE_VAR:
+            {
+                UINT32 index;
+                if (FAILED(pPattern->GetData(&index)) || index >= bindingCount)
+                {
+                    ThrowInvalidManifest();
+                }
+
+                if (pBindings[index].IsNull())
+                {
+                    pBindings[index] = actualType;
+                    return true;
+                }
+
+                return pBindings[index] == actualType;
+            }
+
+            case ELEMENT_TYPE_MVAR:
+                ThrowInvalidManifest();
+
+            case ELEMENT_TYPE_CLASS:
+            case ELEMENT_TYPE_VALUETYPE:
+            {
+                mdToken token;
+                if (FAILED(pPattern->GetToken(&token)))
+                {
+                    ThrowInvalidManifest();
+                }
+
+                TypeHandle patternType = ClassLoader::LoadTypeDefOrRefThrowing(
+                    pModule,
+                    token,
+                    ClassLoader::ThrowIfNotFound,
+                    ClassLoader::PermitUninstDefOrRef);
+
+                if (actualType.IsTypeDesc() || patternType.IsTypeDesc())
+                {
+                    return actualType == patternType;
+                }
+
+                MethodTable* pActualMT = actualType.AsMethodTable();
+                MethodTable* pPatternMT = patternType.AsMethodTable();
+                return pActualMT->HasSameTypeDefAs(pPatternMT) &&
+                    actualType.GetInstantiation().IsEmpty() &&
+                    patternType.GetInstantiation().IsEmpty();
+            }
+
+            case ELEMENT_TYPE_GENERICINST:
+            {
+                CorElementType genericTypeKind;
+                mdToken genericTypeToken;
+                UINT32 argumentCount;
+                if (FAILED(pPattern->GetElemType(&genericTypeKind)) ||
+                    (genericTypeKind != ELEMENT_TYPE_CLASS && genericTypeKind != ELEMENT_TYPE_VALUETYPE) ||
+                    FAILED(pPattern->GetToken(&genericTypeToken)) ||
+                    FAILED(pPattern->GetData(&argumentCount)))
+                {
+                    ThrowInvalidManifest();
+                }
+
+                if (actualType.IsTypeDesc())
+                {
+                    return false;
+                }
+
+                TypeHandle genericType = ClassLoader::LoadTypeDefOrRefThrowing(
+                    pModule,
+                    genericTypeToken,
+                    ClassLoader::ThrowIfNotFound,
+                    ClassLoader::PermitUninstDefOrRef);
+                Instantiation actualInstantiation = actualType.GetInstantiation();
+                if (genericType.IsTypeDesc() ||
+                    !actualType.AsMethodTable()->HasSameTypeDefAs(genericType.AsMethodTable()) ||
+                    actualInstantiation.GetNumArgs() != argumentCount)
+                {
+                    return false;
+                }
+
+                for (UINT32 i = 0; i < argumentCount; i++)
+                {
+                    if (!MatchType(pPattern, pModule, actualInstantiation[i], pBindings, bindingCount))
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+
+            case ELEMENT_TYPE_SZARRAY:
+                return actualType.GetSignatureCorElementType() == ELEMENT_TYPE_SZARRAY &&
+                    MatchType(pPattern, pModule, actualType.GetArrayElementTypeHandle(), pBindings, bindingCount);
+
+            case ELEMENT_TYPE_OBJECT:
+                return actualType.IsObjectType();
+
+            case ELEMENT_TYPE_STRING:
+                return actualType.IsString();
+
+            case ELEMENT_TYPE_BOOLEAN:
+            case ELEMENT_TYPE_CHAR:
+            case ELEMENT_TYPE_I1:
+            case ELEMENT_TYPE_U1:
+            case ELEMENT_TYPE_I2:
+            case ELEMENT_TYPE_U2:
+            case ELEMENT_TYPE_I4:
+            case ELEMENT_TYPE_U4:
+            case ELEMENT_TYPE_I8:
+            case ELEMENT_TYPE_U8:
+            case ELEMENT_TYPE_R4:
+            case ELEMENT_TYPE_R8:
+            case ELEMENT_TYPE_I:
+            case ELEMENT_TYPE_U:
+                return actualType.GetSignatureCorElementType() == elementType;
+
+            default:
+                ThrowInvalidManifest();
+        }
+    }
+
+    bool MatchTarget(
+        const ManifestRow& row,
+        Module* pModule,
+        TypeHandle projection,
+        TypeHandle* pBindings,
+        UINT32 bindingCount)
+    {
+        CONTRACTL
+        {
+            THROWS;
+            GC_TRIGGERS;
+            MODE_ANY;
+        }
+        CONTRACTL_END;
+
+        SigParser pattern(
+            static_cast<PCCOR_SIGNATURE>(row.targetSignature.Ptr()),
+            row.targetSignatureSize);
+        if (!MatchType(&pattern, pModule, projection, pBindings, bindingCount))
+        {
+            return false;
+        }
+
+        PCCOR_SIGNATURE remainingSignature;
+        UINT32 remainingSize;
+        pattern.GetSignature(&remainingSignature, &remainingSize);
+        return remainingSize == 0;
+    }
+
+    bool SatisfiesWitnessConstraints(TypeHandle witnessDefinition, Instantiation witnessInstantiation)
+    {
+        CONTRACTL
+        {
+            THROWS;
+            GC_TRIGGERS;
+            MODE_ANY;
+        }
+        CONTRACTL_END;
+
+        Instantiation formalInstantiation = witnessDefinition.GetInstantiation();
+        _ASSERTE(formalInstantiation.GetNumArgs() == witnessInstantiation.GetNumArgs());
+        SigTypeContext typeContext(witnessInstantiation, Instantiation());
+
+        for (UINT32 i = 0; i < formalInstantiation.GetNumArgs(); i++)
+        {
+            if (!formalInstantiation[i].AsGenericVariable()->SatisfiesConstraints(
+                    &typeContext,
+                    witnessInstantiation[i]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool HasMarker(MethodTable* pWitnessMT)
+    {
+        CONTRACTL
+        {
+            THROWS;
+            GC_NOTRIGGER;
+            MODE_ANY;
+        }
+        CONTRACTL_END;
+
+        HRESULT hr = pWitnessMT->GetModule()->GetMDImport()->GetCustomAttributeByName(
+            pWitnessMT->GetCl(),
+            g_ExtensionInterfaceImplementationAttribute,
+            NULL,
+            NULL);
+        IfFailThrow(hr);
+        return hr == S_OK;
+    }
+
+    bool ValidateInterfaceOwnedBaseClosure(MethodTable* pDeclaredInterfaceMT)
+    {
+        CONTRACTL
+        {
+            THROWS;
+            GC_TRIGGERS;
+            MODE_ANY;
+        }
+        CONTRACTL_END;
+
+        Module* pModule = pDeclaredInterfaceMT->GetModule();
+        MethodTable::InterfaceMapIterator iterator = pDeclaredInterfaceMT->IterateInterfaceMap();
+        while (iterator.Next())
+        {
+            if (iterator.GetInterface(pDeclaredInterfaceMT)->GetModule() != pModule)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    void ValidateWitnessMethodImplementations(MethodTable* pWitnessMT, MethodTable* pDeclaredInterfaceMT)
+    {
+        CONTRACTL
+        {
+            THROWS;
+            GC_TRIGGERS;
+            MODE_ANY;
+        }
+        CONTRACTL_END;
+
+        for (MethodTable::MethodIterator iterator(pDeclaredInterfaceMT); iterator.IsValid(); iterator.Next())
+        {
+            MethodDesc* pInterfaceMethod = iterator.GetMethodDesc();
+            if (!pInterfaceMethod->IsVirtual())
+            {
+                continue;
+            }
+
+            if (pInterfaceMethod->IsStatic())
+            {
+                if (pInterfaceMethod->IsAbstract())
+                {
+                    ThrowInvalidManifest();
+                }
+                continue;
+            }
+
+            DispatchSlot slot = pWitnessMT->FindDispatchSlotForInterfaceMD(
+                pInterfaceMethod,
+                FALSE /* throwOnConflict */);
+            if (slot.IsNull() || slot.GetMethodDesc()->IsAbstract())
+            {
+                ThrowInvalidManifest();
+            }
+        }
+    }
+
+    void ConsiderCandidate(
+        const ManifestRow& row,
+        Module* pModule,
+        MethodTable* pRequestedInterfaceMT,
+        MethodTable* pProjectionMT,
+        UINT16 expectedFlags,
+        MethodTable** ppSelectedWitnessMT)
+    {
+        CONTRACTL
+        {
+            THROWS;
+            GC_TRIGGERS;
+            MODE_ANY;
+        }
+        CONTRACTL_END;
+
+        if (row.flags != expectedFlags)
+        {
+            return;
+        }
+
+        TypeHandle witnessDefinition = ClassLoader::LoadTypeDefThrowing(
+            pModule,
+            row.implementation,
+            ClassLoader::ThrowIfNotFound,
+            ClassLoader::PermitUninstDefOrRef);
+        if (witnessDefinition.IsTypeDesc() ||
+            !witnessDefinition.IsInterface() ||
+            !HasMarker(witnessDefinition.AsMethodTable()))
+        {
+            ThrowInvalidManifest();
+        }
+
+        TypeHandle targetRoot;
+        UINT32 rootTypeVariableIndex = UINT32_MAX;
+        SignatureRootKind targetRootKind = GetSignatureRoot(
+            pModule,
+            static_cast<PCCOR_SIGNATURE>(row.targetSignature.Ptr()),
+            row.targetSignatureSize,
+            &targetRoot,
+            &rootTypeVariableIndex);
+        if (expectedFlags == ExtensionInterfaceImpl_TypeOwned)
+        {
+            if (targetRootKind != SignatureRootKind::Nominal ||
+                targetRoot.GetModule() != pModule ||
+                targetRoot.GetCl() != row.owner ||
+                pProjectionMT->GetModule() != pModule ||
+                pProjectionMT->GetCl() != row.owner)
+            {
+                ThrowInvalidManifest();
+            }
+        }
+        Instantiation formalWitnessInstantiation = witnessDefinition.GetInstantiation();
+        if (targetRootKind == SignatureRootKind::TypeVariable)
+        {
+            if (expectedFlags != ExtensionInterfaceImpl_InterfaceOwned ||
+                rootTypeVariableIndex >= formalWitnessInstantiation.GetNumArgs() ||
+                (!formalWitnessInstantiation[rootTypeVariableIndex].AsGenericVariable()->ConstrainedAsObjRef() &&
+                 !formalWitnessInstantiation[rootTypeVariableIndex].AsGenericVariable()->ConstrainedAsValueType()))
+            {
+                ThrowInvalidManifest();
+            }
+        }
+
+        StackSArray<TypeHandle> bindings;
+        for (UINT32 i = 0; i < formalWitnessInstantiation.GetNumArgs(); i++)
+        {
+            bindings.Append(TypeHandle());
+        }
+
+        if (!MatchTarget(
+                row,
+                pModule,
+                TypeHandle(pProjectionMT),
+                bindings.GetElements(),
+                bindings.GetCount()))
+        {
+            return;
+        }
+
+        for (COUNT_T i = 0; i < bindings.GetCount(); i++)
+        {
+            if (bindings[i].IsNull())
+            {
+                ThrowInvalidManifest();
+            }
+        }
+
+        Instantiation witnessInstantiation(bindings.GetElements(), bindings.GetCount());
+        if (!SatisfiesWitnessConstraints(witnessDefinition, witnessInstantiation))
+        {
+            return;
+        }
+
+        TypeHandle witness = witnessDefinition;
+        if (!witnessInstantiation.IsEmpty())
+        {
+            witness = ClassLoader::LoadGenericInstantiationThrowing(
+                pModule,
+                row.implementation,
+                witnessInstantiation);
+        }
+
+        SigTypeContext signatureContext(witnessInstantiation, Instantiation());
+        TypeHandle declaredInterface = SigPointer(
+            static_cast<PCCOR_SIGNATURE>(row.interfaceSignature.Ptr()),
+            row.interfaceSignatureSize).GetTypeHandleThrowing(pModule, &signatureContext);
+        if (declaredInterface.IsTypeDesc() || !declaredInterface.IsInterface())
+        {
+            ThrowInvalidManifest();
+        }
+
+        TypeHandle interfaceRoot;
+        SignatureRootKind interfaceRootKind = GetSignatureRoot(
+            pModule,
+            static_cast<PCCOR_SIGNATURE>(row.interfaceSignature.Ptr()),
+            row.interfaceSignatureSize,
+            &interfaceRoot);
+        if (interfaceRootKind != SignatureRootKind::Nominal ||
+            (expectedFlags == ExtensionInterfaceImpl_InterfaceOwned &&
+             (interfaceRoot.GetModule() != pModule || interfaceRoot.GetCl() != row.owner)))
+        {
+            ThrowInvalidManifest();
+        }
+
+        MethodTable* pWitnessMT = witness.AsMethodTable();
+        MethodTable* pDeclaredInterfaceMT = declaredInterface.AsMethodTable();
+        if (!pWitnessMT->CanCastToInterface(pDeclaredInterfaceMT))
+        {
+            ThrowInvalidManifest();
+        }
+
+        if (expectedFlags == ExtensionInterfaceImpl_InterfaceOwned &&
+            !ValidateInterfaceOwnedBaseClosure(pDeclaredInterfaceMT))
+        {
+            ThrowInvalidManifest();
+        }
+
+        ValidateWitnessMethodImplementations(pWitnessMT, pDeclaredInterfaceMT);
+
+        if (pDeclaredInterfaceMT != pRequestedInterfaceMT &&
+            !pDeclaredInterfaceMT->CanCastToInterface(pRequestedInterfaceMT))
+        {
+            return;
+        }
+
+        if (*ppSelectedWitnessMT == nullptr)
+        {
+            *ppSelectedWitnessMT = pWitnessMT;
+        }
+        else if (*ppSelectedWitnessMT != pWitnessMT)
+        {
+            *ppSelectedWitnessMT = reinterpret_cast<MethodTable*>(static_cast<UINT_PTR>(-1));
+        }
+    }
+
+    struct ResolutionKey
+    {
+        MethodTable* receiver;
+        MethodTable* interfaceType;
+
+        ResolutionKey(MethodTable* pReceiver = nullptr, MethodTable* pInterface = nullptr)
+            : receiver(pReceiver), interfaceType(pInterface)
+        {
+            LIMITED_METHOD_CONTRACT;
+        }
+    };
+
+    enum class ResolutionState : UINT8
+    {
+        NotImplemented,
+        Resolved,
+        Ambiguous,
+    };
+
+    struct ResolutionEntry
+    {
+        ResolutionKey key;
+        MethodTable* witness;
+        ResolutionState state;
+
+        ResolutionEntry()
+            : key(), witness(nullptr), state(ResolutionState::NotImplemented)
+        {
+            LIMITED_METHOD_CONTRACT;
+        }
+
+        ResolutionEntry(ResolutionKey entryKey, MethodTable* pWitness, ResolutionState entryState)
+            : key(entryKey), witness(pWitness), state(entryState)
+        {
+            LIMITED_METHOD_CONTRACT;
+        }
+    };
+
+    class ResolutionCacheTraits : public NoRemoveSHashTraits<DefaultSHashTraits<ResolutionEntry>>
+    {
+    public:
+        typedef ResolutionKey key_t;
+        typedef ResolutionEntry element_t;
+        typedef COUNT_T count_t;
+
+        static key_t GetKey(const element_t& entry)
+        {
+            LIMITED_METHOD_CONTRACT;
+            return entry.key;
+        }
+
+        static BOOL Equals(const key_t& left, const key_t& right)
+        {
+            LIMITED_METHOD_CONTRACT;
+            return left.receiver == right.receiver && left.interfaceType == right.interfaceType;
+        }
+
+        static count_t Hash(const key_t& key)
+        {
+            LIMITED_METHOD_CONTRACT;
+            return static_cast<count_t>(
+                (reinterpret_cast<UINT_PTR>(key.receiver) >> 3) ^
+                (reinterpret_cast<UINT_PTR>(key.interfaceType) >> 7));
+        }
+
+        static bool IsNull(const element_t& entry)
+        {
+            LIMITED_METHOD_CONTRACT;
+            return entry.key.receiver == nullptr;
+        }
+
+        static const element_t Null()
+        {
+            LIMITED_METHOD_CONTRACT;
+            return element_t();
+        }
+    };
+
+    typedef SHash<ResolutionCacheTraits> ResolutionCache;
+    CrstStatic s_resolutionCacheLock;
+    ResolutionCache* s_pResolutionCache;
+
+    struct ResolvingPair
+    {
+        MethodTable* receiver;
+        MethodTable* interfaceType;
+        ResolvingPair* previous;
+    };
+
+    thread_local ResolvingPair* t_pResolvingPair;
+
+    class ResolvingPairHolder
+    {
+        ResolvingPair m_pair;
+
+    public:
+        ResolvingPairHolder(MethodTable* pReceiverMT, MethodTable* pInterfaceMT)
+            : m_pair{pReceiverMT, pInterfaceMT, t_pResolvingPair}
+        {
+            LIMITED_METHOD_CONTRACT;
+            t_pResolvingPair = &m_pair;
+        }
+
+        ~ResolvingPairHolder()
+        {
+            LIMITED_METHOD_CONTRACT;
+            _ASSERTE(t_pResolvingPair == &m_pair);
+            t_pResolvingPair = m_pair.previous;
+        }
+
+        bool IsOutermost() const
+        {
+            LIMITED_METHOD_CONTRACT;
+            return m_pair.previous == nullptr;
+        }
+    };
+
+    bool IsResolving(MethodTable* pReceiverMT, MethodTable* pInterfaceMT)
+    {
+        LIMITED_METHOD_CONTRACT;
+
+        for (ResolvingPair* pPair = t_pResolvingPair; pPair != nullptr; pPair = pPair->previous)
+        {
+            if (pPair->receiver == pReceiverMT && pPair->interfaceType == pInterfaceMT)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    bool CanCache(MethodTable* pReceiverMT, MethodTable* pInterfaceMT)
+    {
+        LIMITED_METHOD_CONTRACT;
+        return !TypeHandle(pReceiverMT).IsCollectible() && !TypeHandle(pInterfaceMT).IsCollectible();
+    }
+
+    bool TryGetCachedResolution(
+        MethodTable* pReceiverMT,
+        MethodTable* pInterfaceMT,
+        ResolutionEntry* pEntry)
+    {
+        CONTRACTL
+        {
+            NOTHROW;
+            GC_NOTRIGGER;
+            MODE_ANY;
+        }
+        CONTRACTL_END;
+
+        if (!CanCache(pReceiverMT, pInterfaceMT))
+        {
+            return false;
+        }
+
+        CrstHolder lock(&s_resolutionCacheLock);
+        if (s_pResolutionCache == nullptr)
+        {
+            return false;
+        }
+
+        ResolutionEntry entry = s_pResolutionCache->Lookup(ResolutionKey(pReceiverMT, pInterfaceMT));
+        if (ResolutionCacheTraits::IsNull(entry))
+        {
+            return false;
+        }
+
+        *pEntry = entry;
+        return true;
+    }
+
+    void CacheResolution(
+        MethodTable* pReceiverMT,
+        MethodTable* pInterfaceMT,
+        MethodTable* pWitnessMT,
+        ResolutionState state)
+    {
+        CONTRACTL
+        {
+            THROWS;
+            GC_NOTRIGGER;
+            MODE_ANY;
+        }
+        CONTRACTL_END;
+
+        if (!CanCache(pReceiverMT, pInterfaceMT) ||
+            (pWitnessMT != nullptr && TypeHandle(pWitnessMT).IsCollectible()))
+        {
+            return;
+        }
+
+        CrstHolder lock(&s_resolutionCacheLock);
+        if (s_pResolutionCache == nullptr)
+        {
+            s_pResolutionCache = new ResolutionCache();
+        }
+
+        ResolutionKey key(pReceiverMT, pInterfaceMT);
+        if (ResolutionCacheTraits::IsNull(s_pResolutionCache->Lookup(key)))
+        {
+            s_pResolutionCache->Add(ResolutionEntry(key, pWitnessMT, state));
+        }
+    }
+
+    void AppendProjection(StackSArray<MethodTable*>* pProjections, MethodTable* pProjectionMT)
+    {
+        CONTRACTL
+        {
+            THROWS;
+            GC_NOTRIGGER;
+            MODE_ANY;
+        }
+        CONTRACTL_END;
+
+        for (COUNT_T i = 0; i < pProjections->GetCount(); i++)
+        {
+            if ((*pProjections)[i] == pProjectionMT)
+            {
+                return;
+            }
+        }
+
+        pProjections->Append(pProjectionMT);
+    }
+}
+
+void ExtensionInterface::Initialize()
+{
+    WRAPPER_NO_CONTRACT;
+    s_resolutionCacheLock.Init(CrstLeafLock, CRST_UNSAFE_ANYMODE);
+}
+
+void ExtensionInterface::SetMethodTableFlags(MethodTable* pMT)
+{
+    CONTRACTL
+    {
+        THROWS;
+        GC_TRIGGERS;
+        MODE_ANY;
+    }
+    CONTRACTL_END;
+
+    bool hasTypeOwnedExtensionImpls =
+        pMT->GetParentMethodTable() != nullptr && pMT->GetParentMethodTable()->HasTypeOwnedExtensionImpls();
+    bool hasInterfaceOwnedExtensionImpls = false;
+
+    MethodTable::InterfaceMapIterator interfaceIterator = pMT->IterateInterfaceMap();
+    while (!hasTypeOwnedExtensionImpls && interfaceIterator.Next())
+    {
+        hasTypeOwnedExtensionImpls = interfaceIterator.GetInterfaceApprox()->HasTypeOwnedExtensionImpls();
+    }
+
+    Module* pModule = pMT->GetModule();
+    if (pModule->HasExtensionInterfaceImplementations())
+    {
+        ForEachManifestRow(pModule, [&](const ManifestRow& row)
+        {
+            if (row.flags == ExtensionInterfaceImpl_TypeOwned && row.owner == pMT->GetCl())
+            {
+                hasTypeOwnedExtensionImpls = true;
+            }
+            else if (row.flags == ExtensionInterfaceImpl_InterfaceOwned &&
+                     pMT->IsInterface() &&
+                     InterfaceDefinitionExtends(pModule, row.owner, pMT->GetCl()))
+            {
+                hasInterfaceOwnedExtensionImpls = true;
+            }
+        });
+    }
+
+    if (hasTypeOwnedExtensionImpls)
+    {
+        pMT->SetHasTypeOwnedExtensionImpls();
+    }
+
+    if (hasInterfaceOwnedExtensionImpls)
+    {
+        pMT->SetHasInterfaceOwnedExtensionImpls();
+    }
+}
+
+bool ExtensionInterface::IsExtensionSensitive(MethodTable* pReceiverMT, MethodTable* pInterfaceMT)
+{
+    LIMITED_METHOD_CONTRACT;
+    return pReceiverMT->HasTypeOwnedExtensionImpls() || pInterfaceMT->HasInterfaceOwnedExtensionImpls();
+}
+
+bool ExtensionInterface::IsWitnessForReceiver(MethodTable* pReceiverMT, MethodTable* pWitnessMT)
+{
+    CONTRACTL
+    {
+        THROWS;
+        GC_TRIGGERS;
+        MODE_ANY;
+    }
+    CONTRACTL_END;
+
+    if (!pWitnessMT->IsInterface() || !HasMarker(pWitnessMT))
+    {
+        return false;
+    }
+
+    MethodTable::InterfaceMapIterator interfaceIterator = pWitnessMT->IterateInterfaceMap();
+    while (interfaceIterator.Next())
+    {
+        MethodTable* pContractMT = interfaceIterator.GetInterface(pWitnessMT);
+        MethodTable* pResolvedWitnessMT;
+        if (TryResolve(pReceiverMT, pContractMT, &pResolvedWitnessMT) && pResolvedWitnessMT == pWitnessMT)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool ExtensionInterface::TryResolve(
+    MethodTable* pReceiverMT,
+    MethodTable* pInterfaceMT,
+    MethodTable** ppWitnessMT)
+{
+    CONTRACTL
+    {
+        THROWS;
+        GC_TRIGGERS;
+        MODE_ANY;
+        PRECONDITION(CheckPointer(pReceiverMT));
+        PRECONDITION(CheckPointer(pInterfaceMT));
+        PRECONDITION(pInterfaceMT->IsInterface());
+        PRECONDITION(CheckPointer(ppWitnessMT));
+    }
+    CONTRACTL_END;
+
+    *ppWitnessMT = nullptr;
+
+    if (pReceiverMT->IsNullable() ||
+        pReceiverMT->IsByRefLike() ||
+        pReceiverMT->CanCastToInterface(pInterfaceMT) ||
+        !IsExtensionSensitive(pReceiverMT, pInterfaceMT))
+    {
+        return false;
+    }
+
+    ResolutionEntry cachedEntry;
+    if (TryGetCachedResolution(pReceiverMT, pInterfaceMT, &cachedEntry))
+    {
+        if (cachedEntry.state == ResolutionState::Ambiguous)
+        {
+            ThrowInvalidManifest();
+        }
+
+        *ppWitnessMT = cachedEntry.witness;
+        return cachedEntry.state == ResolutionState::Resolved;
+    }
+
+    if (IsResolving(pReceiverMT, pInterfaceMT))
+    {
+        return false;
+    }
+
+    ResolvingPairHolder resolvingPair(pReceiverMT, pInterfaceMT);
+
+    StackSArray<MethodTable*> projections;
+    for (MethodTable* pCurrentMT = pReceiverMT; pCurrentMT != nullptr; pCurrentMT = pCurrentMT->GetParentMethodTable())
+    {
+        AppendProjection(&projections, pCurrentMT);
+    }
+
+    MethodTable::InterfaceMapIterator interfaceIterator = pReceiverMT->IterateInterfaceMap();
+    while (interfaceIterator.Next())
+    {
+        AppendProjection(&projections, interfaceIterator.GetInterface(pReceiverMT));
+    }
+
+    MethodTable* pSelectedWitnessMT = nullptr;
+    for (COUNT_T i = 0; i < projections.GetCount(); i++)
+    {
+        MethodTable* pProjectionMT = projections[i];
+        Module* pProjectionModule = pProjectionMT->GetModule();
+        if (!pProjectionModule->HasExtensionInterfaceImplementations())
+        {
+            continue;
+        }
+
+        ForEachManifestRow(pProjectionModule, [&](const ManifestRow& row)
+        {
+            if (row.owner == pProjectionMT->GetCl())
+            {
+                ConsiderCandidate(
+                    row,
+                    pProjectionModule,
+                    pInterfaceMT,
+                    pProjectionMT,
+                    ExtensionInterfaceImpl_TypeOwned,
+                    &pSelectedWitnessMT);
+            }
+        });
+    }
+
+    Module* pInterfaceModule = pInterfaceMT->GetModule();
+    if (pInterfaceModule->HasExtensionInterfaceImplementations())
+    {
+        ForEachManifestRow(pInterfaceModule, [&](const ManifestRow& row)
+        {
+            if (row.flags != ExtensionInterfaceImpl_InterfaceOwned)
+            {
+                return;
+            }
+
+            TypeHandle targetRoot;
+            SignatureRootKind rootKind = GetSignatureRoot(
+                pInterfaceModule,
+                static_cast<PCCOR_SIGNATURE>(row.targetSignature.Ptr()),
+                row.targetSignatureSize,
+                &targetRoot);
+
+            // A target rooted in a type variable denotes the exact receiver, not
+            // each of its nominal projections.
+            if (rootKind == SignatureRootKind::TypeVariable)
+            {
+                ConsiderCandidate(
+                    row,
+                    pInterfaceModule,
+                    pInterfaceMT,
+                    pReceiverMT,
+                    ExtensionInterfaceImpl_InterfaceOwned,
+                    &pSelectedWitnessMT);
+                return;
+            }
+
+            for (COUNT_T i = 0; i < projections.GetCount(); i++)
+            {
+                ConsiderCandidate(
+                    row,
+                    pInterfaceModule,
+                    pInterfaceMT,
+                    projections[i],
+                    ExtensionInterfaceImpl_InterfaceOwned,
+                    &pSelectedWitnessMT);
+            }
+        });
+    }
+
+    MethodTable* const ambiguous = reinterpret_cast<MethodTable*>(static_cast<UINT_PTR>(-1));
+    if (pSelectedWitnessMT == ambiguous)
+    {
+        CacheResolution(pReceiverMT, pInterfaceMT, nullptr, ResolutionState::Ambiguous);
+        ThrowInvalidManifest();
+    }
+
+    if (pSelectedWitnessMT == nullptr)
+    {
+        if (resolvingPair.IsOutermost())
+        {
+            CacheResolution(pReceiverMT, pInterfaceMT, nullptr, ResolutionState::NotImplemented);
+        }
+        return false;
+    }
+
+    CacheResolution(pReceiverMT, pInterfaceMT, pSelectedWitnessMT, ResolutionState::Resolved);
+    *ppWitnessMT = pSelectedWitnessMT;
+    return true;
+}

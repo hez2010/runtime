@@ -17,6 +17,7 @@
 #include "gcheaputilities.h"
 #include "field.h"
 #include "argdestination.h"
+#include "extensioninterfaceimpl.h"
 
 
 SVAL_IMPL(INT32, ArrayBase, s_arrayBoundsZero);
@@ -264,6 +265,11 @@ TypeHandle Object::GetGCSafeTypeHandleIfPossible() const
         if (pMT->CanCastToInterface(pInterfaceMT))
         {
             bSupportsItf = TRUE;
+        }
+        else if (ExtensionInterface::IsExtensionSensitive(pMT, pInterfaceMT))
+        {
+            MethodTable* pWitnessMT;
+            bSupportsItf = ExtensionInterface::TryResolve(pMT, pInterfaceMT, &pWitnessMT);
         }
 #ifdef FEATURE_COMINTEROP
         else

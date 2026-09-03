@@ -65,6 +65,8 @@
 #define g_CompilerServicesUnsafeValueTypeAttribute "System.Runtime.CompilerServices.UnsafeValueTypeAttribute"
 #define g_CompilerServicesIsByRefLikeAttribute "System.Runtime.CompilerServices.IsByRefLikeAttribute"
 #define g_CompilerServicesIntrinsicAttribute "System.Runtime.CompilerServices.IntrinsicAttribute"
+#define g_ExtensionInterfaceImplementationAttribute "System.Runtime.CompilerServices.ExtensionInterfaceImplementationAttribute"
+#define g_ExtensionInterfaceImplAttribute "System.Runtime.CompilerServices.ExtensionInterfaceImplAttribute"
 #define g_UnmanagedFunctionPointerAttribute "System.Runtime.InteropServices.UnmanagedFunctionPointerAttribute"
 #define g_DefaultDllImportSearchPathsAttribute "System.Runtime.InteropServices.DefaultDllImportSearchPathsAttribute"
 #define g_UnmanagedCallersOnlyAttribute "System.Runtime.InteropServices.UnmanagedCallersOnlyAttribute"

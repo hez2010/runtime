@@ -669,10 +669,10 @@ private:
 
     enum {
         // These are the values set in m_dwPersistedFlags.
-        // unused                   = 0x00000001,
+        EXTENSION_INTERFACE_IMPLS_IS_CACHED = 0x00000001,
         COMPUTED_GLOBAL_CLASS       = 0x00000002,
 
-        // unused                   = 0x00000004,
+        HAS_EXTENSION_INTERFACE_IMPLS       = 0x00000004,
         // unused                   = 0x00000008,
 
         // This flag applies to assembly, but it is stored so it can be cached in ngen image
@@ -1615,6 +1615,7 @@ protected:
 public:
 
     BOOL                    HasDefaultDllImportSearchPathsAttribute();
+    BOOL                    HasExtensionInterfaceImplementations();
 
     ULONG DefaultDllImportSearchPathsAttributeCachedValue()
     {

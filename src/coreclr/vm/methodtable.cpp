@@ -5,6 +5,7 @@
 //
 
 #include "common.h"
+#include "extensioninterfaceimpl.h"
 
 #include "clsload.hpp"
 #include "method.hpp"
@@ -493,6 +494,28 @@ PTR_MethodTable InterfaceInfo_t::GetApproxMethodTable(Module * pContainingModule
     _ASSERTE(pItfMT != NULL);
 #endif // _DEBUG
 
+    bool checkedNominalImplementation = false;
+    bool isNominalImplementation = false;
+    if (ExtensionInterface::IsExtensionSensitive(pServerMT, ownerType.AsMethodTable()))
+    {
+        isNominalImplementation = TypeHandle(pServerMT).CanCastTo(ownerType);
+        checkedNominalImplementation = true;
+        if (!isNominalImplementation)
+        {
+            MethodTable* pWitnessMT;
+            if (ExtensionInterface::TryResolve(pServerMT, ownerType.AsMethodTable(), &pWitnessMT))
+            {
+                DispatchSlot slot = pWitnessMT->FindDispatchSlotForInterfaceMD(ownerType, pItfMD, TRUE /* throwOnConflict */);
+                if (!slot.IsNull())
+                {
+                    return slot.GetMethodDesc();
+                }
+
+                COMPlusThrow(kEntryPointNotFoundException);
+            }
+        }
+    }
+
 #ifdef FEATURE_COMINTEROP
     if (pServerMT->IsComObjectType() && !pItfMD->HasMethodInstantiation())
     {
@@ -512,9 +535,18 @@ PTR_MethodTable InterfaceInfo_t::GetApproxMethodTable(Module * pContainingModule
     // For IDynamicInterfaceCastable, instead of trying to find method implementation in the real object type
     // we call GetInterfaceImplementation on the object and call GetMethodDescForInterfaceMethod
     // with whatever type it returns.
-    if (pServerMT->IsIDynamicInterfaceCastable()
-        && !TypeHandle(pServerMT).CanCastTo(ownerType)) // we need to make sure object doesn't implement this interface in a natural way
+    if (pServerMT->IsIDynamicInterfaceCastable())
     {
+        if (!checkedNominalImplementation)
+        {
+            isNominalImplementation = TypeHandle(pServerMT).CanCastTo(ownerType);
+        }
+
+        if (isNominalImplementation)
+        {
+            return pServerMT->GetMethodDescForInterfaceMethod(ownerType, pItfMD, TRUE /* throwOnConflict */);
+        }
+
         TypeHandle implTypeHandle;
         {
             GCX_COOP();
@@ -1379,8 +1411,14 @@ BOOL MethodTable::CanCastTo(MethodTable* pTargetMT, TypeHandlePairList* pVisited
                                 CanCastToClass(pTargetMT, pVisited);
 
     // We only consider type-based conversion rules here.
-    // Therefore a negative result cannot rule out convertibility for IDynamicInterfaceCastable and COM objects
-    if (result || !(pTargetMT->IsInterface() && (this->IsComObjectType() || this->IsIDynamicInterfaceCastable())))
+    // Therefore a negative result cannot rule out convertibility for extension implementations,
+    // IDynamicInterfaceCastable, and COM objects.
+    if (result ||
+        !(pTargetMT->IsInterface() &&
+          (this->HasTypeOwnedExtensionImpls() ||
+           pTargetMT->HasInterfaceOwnedExtensionImpls() ||
+           this->IsComObjectType() ||
+           this->IsIDynamicInterfaceCastable())))
     {
         CastCache::TryAddToCache(this, pTargetMT, (BOOL)result);
     }

@@ -256,6 +256,12 @@ namespace System.Runtime.CompilerServices.Tests
         }
 
         [Fact]
+        public static void ExtensionInterfaceImplementationAttributeTests()
+        {
+            Assert.NotNull(new ExtensionInterfaceImplementationAttribute());
+        }
+
+        [Fact]
         public static void ReferenceAssemblyAttributeTests()
         {
             var attr1 = new ReferenceAssemblyAttribute(null);

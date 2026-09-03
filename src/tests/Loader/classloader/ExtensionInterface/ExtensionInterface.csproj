@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RequiresProcessIsolation>true</RequiresProcessIsolation>
+    <ReferenceXUnitWrapperGenerator>false</ReferenceXUnitWrapperGenerator>
+    <CLRTestTargetUnsupported Condition="'$(RuntimeFlavor)' != 'coreclr'">true</CLRTestTargetUnsupported>
+    <NativeAotIncompatible>true</NativeAotIncompatible>
+    <R2RIncompatible>true</R2RIncompatible>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="ExtensionInterface.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="ExtensionInterfaceTypes.ilproj" />
+  </ItemGroup>
+</Project>

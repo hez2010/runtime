@@ -1104,6 +1104,30 @@ public:
     void SetIDynamicInterfaceCastable();
     BOOL IsIDynamicInterfaceCastable();
 
+    void SetHasTypeOwnedExtensionImpls()
+    {
+        LIMITED_METHOD_CONTRACT;
+        SetFlag(enum_flag_HasTypeOwnedExtensionImpls);
+    }
+
+    BOOL HasTypeOwnedExtensionImpls()
+    {
+        LIMITED_METHOD_DAC_CONTRACT;
+        return GetFlag(enum_flag_HasTypeOwnedExtensionImpls);
+    }
+
+    void SetHasInterfaceOwnedExtensionImpls()
+    {
+        LIMITED_METHOD_CONTRACT;
+        SetFlag(enum_flag_HasInterfaceOwnedExtensionImpls);
+    }
+
+    BOOL HasInterfaceOwnedExtensionImpls()
+    {
+        LIMITED_METHOD_DAC_CONTRACT;
+        return GetFlag(enum_flag_HasInterfaceOwnedExtensionImpls);
+    }
+
     void SetIsTrackedReferenceWithFinalizer();
     BOOL IsTrackedReferenceWithFinalizer();
 
@@ -3828,7 +3852,7 @@ private:
 
         enum_flag_HasFinalizer                = 0x00100000, // instances require finalization. GC depends on this bit.
         enum_flag_Collectible                 = 0x00200000, // GC depends on this bit. [cDAC] [RuntimeTypeSystem]: Contract depends on this value
-        // enum_flag_unused                   = 0x00400000,
+        enum_flag_HasTypeOwnedExtensionImpls = 0x00400000,
 
 #ifdef FEATURE_64BIT_ALIGNMENT
         enum_flag_RequiresAlign8              = 0x00800000, // Type requires 8-byte alignment (only set on platforms that require this and don't get it implicitly) [cDAC] [RuntimeTypeSystem]: Contract depends on this value
@@ -3837,7 +3861,7 @@ private:
         enum_flag_ContainsGCPointers          = 0x01000000, // Contains object references. [cDAC] [RuntimeTypeSystem]: Contract depends on this value
         enum_flag_HasTypeEquivalence          = 0x02000000, // can be equivalent to another type
         enum_flag_IsTrackedReferenceWithFinalizer = 0x04000000, // [cDAC] [RuntimeTypeSystem]: Contract depends on this value
-        // unused                             = 0x08000000,
+        enum_flag_HasInterfaceOwnedExtensionImpls = 0x08000000,
 
         enum_flag_IDynamicInterfaceCastable   = 0x10000000, // class implements IDynamicInterfaceCastable interface
         enum_flag_ContainsGenericVariables    = 0x20000000, // we cache this flag to help detect these efficiently and
@@ -3849,6 +3873,7 @@ private:
         enum_flag_NonTrivialInterfaceCast   =  enum_flag_Category_Array
                                              | enum_flag_ComObject
                                              | enum_flag_IDynamicInterfaceCastable
+                                             | enum_flag_HasTypeOwnedExtensionImpls
                                              | enum_flag_Category_ValueType
 
     };  // enum WFLAGS_HIGH_ENUM

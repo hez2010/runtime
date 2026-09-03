@@ -40,6 +40,7 @@
 #include "perfmap.h"
 
 #include "methoddescbackpatchinfo.h"
+#include "extensioninterfaceimpl.h"
 
 #if defined(FEATURE_GDBJIT)
 #include "gdbjit.h"
@@ -1959,6 +1960,18 @@ extern "C" PCODE STDCALL PreStubWorker(TransitionBlock* pTransitionBlock, Method
                             // that's why we better stick to the MethodTable it belongs to, otherwise
                             // DoPrestub() will fail not being able to find implementation for pMD in pDispatchingMT.
 
+                            pDispatchingMT = pMDMT;
+                        }
+                    }
+                    else if (pMD->GetMethodTable()->IsInterface())
+                    {
+                        MethodTable* pMDMT = pMD->GetMethodTable();
+                        MethodTable* pWitnessMT;
+                        if (ExtensionInterface::IsWitnessForReceiver(pDispatchingMT, pMDMT) ||
+                            ExtensionInterface::TryResolve(pDispatchingMT, pMDMT, &pWitnessMT))
+                        {
+                            // Extension interface dispatch deliberately invokes an interface-owned
+                            // adapter/default body with an object whose MethodTable is the receiver.
                             pDispatchingMT = pMDMT;
                         }
                     }

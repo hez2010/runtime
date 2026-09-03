@@ -1073,6 +1073,39 @@ InstrumentedILOffsetMapping Module::GetInstrumentedILOffsetMapping(mdMethodDef t
 
 #ifndef DACCESS_COMPILE
 
+BOOL Module::HasExtensionInterfaceImplementations()
+{
+    CONTRACTL
+    {
+        THROWS;
+        GC_NOTRIGGER;
+        MODE_ANY;
+    }
+    CONTRACTL_END;
+
+    if (!IsReflectionEmit() && (m_dwPersistedFlags & EXTENSION_INTERFACE_IMPLS_IS_CACHED))
+    {
+        return (m_dwPersistedFlags & HAS_EXTENSION_INTERFACE_IMPLS) != 0;
+    }
+
+    HRESULT hr = GetMDImport()->GetCustomAttributeByName(
+        TokenFromRid(1, mdtModule),
+        g_ExtensionInterfaceImplAttribute,
+        NULL,
+        NULL);
+    IfFailThrow(hr);
+
+    BOOL hasExtensionInterfaceImpls = hr == S_OK;
+    if (!IsReflectionEmit())
+    {
+        InterlockedOr((LONG*)&m_dwPersistedFlags,
+            EXTENSION_INTERFACE_IMPLS_IS_CACHED |
+            (hasExtensionInterfaceImpls ? HAS_EXTENSION_INTERFACE_IMPLS : 0));
+    }
+
+    return hasExtensionInterfaceImpls;
+}
+
 BOOL Module::HasDefaultDllImportSearchPathsAttribute()
 {
     CONTRACTL

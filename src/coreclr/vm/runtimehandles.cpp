@@ -32,6 +32,7 @@
 #include "encee.h"
 #include "finalizerthread.h"
 #include "pregeneratedstringthunks.h"
+#include "extensioninterfaceimpl.h"
 
 extern "C" BOOL QCALLTYPE MdUtf8String_EqualsCaseInsensitive(LPCUTF8 szLhs, LPCUTF8 szRhs, INT32 stringNumBytes)
 {
@@ -837,7 +838,9 @@ extern "C" void QCALLTYPE RuntimeTypeHandle_VerifyInterfaceIsImplemented(QCall::
     // the ifaceHandle MethodTable.
     if (!typeHandle.GetMethodTable()->ImplementsInterface(ifaceHandle.AsMethodTable()))
     {   // If the cheap check fails, try the more expensive but complete check.
-        if (!typeHandle.CanCastTo(ifaceHandle))
+        MethodTable* pWitnessMT;
+        if (!typeHandle.CanCastTo(ifaceHandle) &&
+            !ExtensionInterface::TryResolve(typeHandle.AsMethodTable(), ifaceHandle.AsMethodTable(), &pWitnessMT))
         {   // If the complete check fails, we're certain that this type
             // does not implement the interface specified.
         COMPlusThrow(kArgumentException, W("Arg_NotFoundIFace"));
@@ -874,6 +877,17 @@ extern "C" MethodDesc* QCALLTYPE RuntimeTypeHandle_GetInterfaceMethodImplementat
         //@TODO:STUBDISPATCH: Don't need to track down the implementation, just the declaration, and this can
         //@TODO:              be done faster - just need to make a function FindDispatchDecl.
         DispatchSlot slot(typeHandle.GetMethodTable()->FindDispatchSlotForInterfaceMD(thOwnerOfMD, pMD, FALSE /* throwOnConflict */));
+        if (slot.IsNull())
+        {
+            MethodTable* pWitnessMT;
+            if (ExtensionInterface::TryResolve(
+                    typeHandle.AsMethodTable(),
+                    thOwnerOfMD.AsMethodTable(),
+                    &pWitnessMT))
+            {
+                slot = pWitnessMT->FindDispatchSlotForInterfaceMD(thOwnerOfMD, pMD, FALSE /* throwOnConflict */);
+            }
+        }
         if (!slot.IsNull())
             pResult = slot.GetMethodDesc();
     }

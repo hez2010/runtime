@@ -8,6 +8,7 @@
 #include "CachedInterfaceDispatchPal.h"
 #include "CachedInterfaceDispatch.h"
 #include "comdelegate.h"
+#include "extensioninterfaceimpl.h"
 #include <dn-stdio.h>
 
 #include "perfmap.h"
@@ -2339,6 +2340,16 @@ VirtualCallStubManager::Resolver(
     MethodDesc * pMD = NULL;
     BOOL fShouldPatch = FALSE;
     DispatchSlot implSlot(pMT->FindDispatchSlot(token.GetTypeID(), token.GetSlotNumber(), throwOnConflict));
+
+    if (implSlot.IsNull() && IsInterfaceToken(token))
+    {
+        MethodTable* pTokenMT = GetTypeFromToken(token);
+        MethodTable* pWitnessMT;
+        if (ExtensionInterface::TryResolve(pMT, pTokenMT, &pWitnessMT))
+        {
+            return Resolver(pWitnessMT, token, protectedObj, ppTarget, throwOnConflict);
+        }
+    }
 
     // If we found a target, then just figure out if we're allowed to create a stub around
     // this target and backpatch the callsite.

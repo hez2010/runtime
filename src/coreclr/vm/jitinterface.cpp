@@ -4290,6 +4290,15 @@ TypeCompareState CEEInfo::compareTypesForCast(
     {
         result = TypeCompareState::May;
     }
+    // Extension interface implementations are resolved from the exact source/interface
+    // pair. A nominal failure is not proof that the semantic cast must fail.
+    else if (toHnd.IsInterface() &&
+             !fromHnd.IsTypeDesc() &&
+             (fromHnd.AsMethodTable()->HasTypeOwnedExtensionImpls() ||
+              toHnd.AsMethodTable()->HasInterfaceOwnedExtensionImpls()))
+    {
+        result = TypeCompareState::May;
+    }
     // If casting to Nullable<T>, don't try to optimize
     else if (Nullable::IsNullableType(toHnd))
     {
@@ -5959,8 +5968,11 @@ CorInfoHelpFunc CEEInfo::getCastingHelperStatic(TypeHandle clsHnd, bool fThrowin
     else
     if (clsHnd.IsInterface())
     {
-        // If it is a non-variant interface, use the fast interface helper
-        helper = CORINFO_HELP_ISINSTANCEOFINTERFACE;
+        if (!clsHnd.AsMethodTable()->HasInterfaceOwnedExtensionImpls())
+        {
+            // If it is a non-variant interface, use the fast interface helper
+            helper = CORINFO_HELP_ISINSTANCEOFINTERFACE;
+        }
     }
     else
     if (clsHnd.IsArray())

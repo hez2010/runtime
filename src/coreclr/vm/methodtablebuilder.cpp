@@ -14,6 +14,7 @@
 #include "fieldmarshaler.h"
 #include "encee.h"
 #include "customattribute.h"
+#include "extensioninterfaceimpl.h"
 #include "typestring.h"
 
 //*******************************************************************************
@@ -2024,6 +2025,8 @@ MethodTableBuilder::BuildMethodTableThrowing(
             pMT->SetIDynamicInterfaceCastable();
         }
     }
+
+    ExtensionInterface::SetMethodTableFlags(pMT);
 
 #ifdef FEATURE_OBJCMARSHAL
     // Check if this type has a finalizer and then if it is a referenced tracked type.

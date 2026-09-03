@@ -14778,6 +14778,12 @@ namespace System.Runtime.CompilerServices
         public ExtensionAttribute() { }
     }
     [System.ComponentModel.EditorBrowsableAttribute(System.ComponentModel.EditorBrowsableState.Never)]
+    [System.AttributeUsageAttribute(System.AttributeTargets.Interface, Inherited=false)]
+    public sealed partial class ExtensionInterfaceImplementationAttribute : System.Attribute
+    {
+        public ExtensionInterfaceImplementationAttribute() { }
+    }
+    [System.ComponentModel.EditorBrowsableAttribute(System.ComponentModel.EditorBrowsableState.Never)]
     [System.AttributeUsage(System.AttributeTargets.Class | System.AttributeTargets.Struct | System.AttributeTargets.Enum | System.AttributeTargets.Method | System.AttributeTargets.Property | System.AttributeTargets.Field | System.AttributeTargets.Event | System.AttributeTargets.Interface | System.AttributeTargets.Delegate, Inherited = false)]
     public sealed partial class ExtensionMarkerAttribute : System.Attribute
     {

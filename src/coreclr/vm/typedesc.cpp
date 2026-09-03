@@ -13,6 +13,7 @@
 // ============================================================================
 
 #include "common.h"
+#include "extensioninterfaceimpl.h"
 #include "typedesc.h"
 #include "typestring.h"
 #include "array.h"
@@ -1664,7 +1665,23 @@ BOOL TypeVarTypeDesc::SatisfiesConstraints(SigTypeContext *pTypeContextOfConstra
                 else
                 {
                     // if a concrete type can be cast to the constraint, then this constraint will be satisfied
-                    if (thElem.CanCastTo(thConstraint))
+                    bool satisfiesConstraint = thElem.CanCastTo(thConstraint);
+                    // Reference-type instance dispatch can use the witness adapter directly. Value-type
+                    // constrained calls and static virtual dispatch require the canonical-body manifest.
+                    if (!satisfiesConstraint &&
+                        thConstraint.IsInterface() &&
+                        !thConstraint.AsMethodTable()->HasVirtualStaticMethods() &&
+                        !thElem.IsTypeDesc() &&
+                        !thElem.IsValueType())
+                    {
+                        MethodTable* pWitnessMT;
+                        satisfiesConstraint = ExtensionInterface::TryResolve(
+                            thElem.AsMethodTable(),
+                            thConstraint.AsMethodTable(),
+                            &pWitnessMT);
+                    }
+
+                    if (satisfiesConstraint)
                     {
                         // Static virtual methods need an extra check when an abstract type is used for instantiation
                         // to ensure that the implementation of the constraint is complete

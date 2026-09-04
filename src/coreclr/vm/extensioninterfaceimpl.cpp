@@ -1119,7 +1119,11 @@ namespace
                 return false;
             }
 
-            bodySignature.GetByRefType(&receiverTypeHandle);
+            CorElementType byRefType = bodySignature.GetByRefType(&receiverTypeHandle);
+            if (CorIsPrimitiveType(byRefType))
+            {
+                receiverTypeHandle = TypeHandle(CoreLibBinder::GetElementType(byRefType));
+            }
         }
         else
         {

@@ -11,6 +11,7 @@
     <Compile Include="ExtensionInterface.cs" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="ExtensionInterfaceForeignTypes.csproj" />
     <ProjectReference Include="ExtensionInterfaceTypes.ilproj" />
   </ItemGroup>
 </Project>

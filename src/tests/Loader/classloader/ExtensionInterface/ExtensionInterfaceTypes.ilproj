@@ -5,4 +5,7 @@
   <ItemGroup>
     <Compile Include="ExtensionInterfaceTypes.il" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="ExtensionInterfaceForeignTypes.csproj" />
+  </ItemGroup>
 </Project>

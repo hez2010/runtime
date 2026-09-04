@@ -23,7 +23,7 @@ public static class ExtensionInterfaceTests
         ConditionalGenericsUseExtensionAwareConstraints();
         Console.WriteLine("generic-identity");
         ConstrainedGenericParametersRetainOriginalTypes();
-        Console.WriteLine("stage2");
+        Console.WriteLine("canonical-calls");
         CanonicalBodiesSupportConstrainedAndStaticCalls();
         Console.WriteLine("coherence");
         CyclesDoNotJustifyThemselvesAndAmbiguityIsStable();
@@ -162,56 +162,76 @@ public static class ExtensionInterfaceTests
 
     public static void ConstrainedGenericParametersRetainOriginalTypes()
     {
-        VerifyConstrainedTypeIdentity(
-            nameof(GetReferenceTypeThroughConstraint),
-            typeof(TypeOwnedTarget),
-            new TypeOwnedTarget(42));
-        VerifyConstrainedTypeIdentity(
-            nameof(GetValueTypeThroughConstraint),
-            typeof(ValueTarget),
-            new ValueTarget { Value = 42 });
+        VerifyReferenceGenericParameterIdentity();
+        VerifyIntExtensionImplementation();
+        VerifyValueGenericParameterIdentity();
+        Assert.Equal(typeof(string), SharedGenericIdentityCalls.RunStringType());
+        DeclaredInterfacesOnForeignTypesRetainGenericIdentity();
+        ForeignInterfacesOnDeclaredTypesRetainGenericIdentity();
+        GenericVirtualMethodsRetainGenericIdentity();
     }
 
-    private delegate Type TypeIdentityFunc<T>(T value);
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void VerifyReferenceGenericParameterIdentity() =>
+        Assert.Equal(typeof(TypeOwnedTarget), GenericIdentityCalls.RunReferenceType());
 
-    private static void VerifyConstrainedTypeIdentity<T>(string methodName, Type expectedType, T value)
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void VerifyIntExtensionImplementation()
     {
-        Assert.Equal(expectedType, typeof(T));
-
-        MethodInfo definition = typeof(ExtensionInterfaceTests)
-            .GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Static)!;
-        Assert.Equal(1, definition.GetGenericArguments().Length);
-
-        MethodInfo method = definition.MakeGenericMethod(typeof(T));
-        Assert.Equal(expectedType, method.GetGenericArguments()[0]);
-
-        var getType = (TypeIdentityFunc<T>)method.CreateDelegate(typeof(TypeIdentityFunc<T>));
-        Assert.Equal(expectedType, getType(value));
+        object value = 42;
+        Assert.True(value is IFoo);
+        Assert.Equal(42, ((IFoo)value).GetValue());
     }
 
-    private static Type GetReferenceTypeThroughConstraint<T>(T value) where T : ITypeOwned
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void VerifyValueGenericParameterIdentity() =>
+        Assert.Equal(typeof(int), GenericIdentityCalls.RunValueType());
+
+    private static void DeclaredInterfacesOnForeignTypesRetainGenericIdentity()
     {
-        _ = value.GetValue();
-        return typeof(T);
+        Assert.Equal(typeof(ForeignOrdinaryClass), IdentityMatrixCalls.RunDeclaredInterfaceForeignOrdinaryClass());
+        Assert.Equal(typeof(ForeignOrdinaryStruct), IdentityMatrixCalls.RunDeclaredInterfaceForeignOrdinaryStruct());
+        Assert.Equal(typeof(ForeignGenericClass<int>), IdentityMatrixCalls.RunDeclaredInterfaceForeignGenericClass());
+        Assert.Equal(typeof(ForeignGenericStruct<int>), IdentityMatrixCalls.RunDeclaredInterfaceForeignGenericStruct());
+        Assert.Equal(typeof(ForeignConditionalClass<int>), IdentityMatrixCalls.RunDeclaredInterfaceForeignConditionalClass());
+        Assert.Equal(typeof(ForeignNestedClass<ForeignGenericStruct<int>>), IdentityMatrixCalls.RunDeclaredInterfaceForeignNested());
+        Assert.False(IdentityMatrixCalls.IsDeclaredInterfaceForeignConditionalObjectImplemented());
     }
 
-    private static Type GetValueTypeThroughConstraint<T>(T value) where T : IValueOwned
+    private static void ForeignInterfacesOnDeclaredTypesRetainGenericIdentity()
     {
-        _ = value.GetValue();
-        return typeof(T);
+        Assert.Equal(typeof(DeclaredOrdinaryClass), IdentityMatrixCalls.RunForeignInterfaceDeclaredOrdinaryClass());
+        Assert.Equal(typeof(DeclaredOrdinaryStruct), IdentityMatrixCalls.RunForeignInterfaceDeclaredOrdinaryStruct());
+        Assert.Equal(typeof(DeclaredGenericClass<int>), IdentityMatrixCalls.RunForeignInterfaceDeclaredGenericClass());
+        Assert.Equal(typeof(DeclaredGenericStruct<int>), IdentityMatrixCalls.RunForeignInterfaceDeclaredGenericStruct());
+        Assert.Equal(typeof(DeclaredConditionalClass<int>), IdentityMatrixCalls.RunForeignInterfaceDeclaredConditionalClass());
+        Assert.Equal(typeof(DeclaredNestedClass<ForeignGenericStruct<int>>), IdentityMatrixCalls.RunForeignInterfaceDeclaredNested());
+        Assert.False(IdentityMatrixCalls.IsForeignInterfaceDeclaredConditionalObjectImplemented());
+    }
+
+    private static void GenericVirtualMethodsRetainGenericIdentity()
+    {
+        Assert.Equal(typeof(ForeignGenericMethodClass), GenericVirtualMethodCalls.RunDeclaredInterfaceForeignClass());
+        Assert.Equal(typeof(ForeignGenericMethodStruct), GenericVirtualMethodCalls.RunDeclaredInterfaceForeignStruct());
+        Assert.Equal(typeof(DeclaredGenericMethodClass), GenericVirtualMethodCalls.RunForeignInterfaceDeclaredClass());
+        Assert.Equal(typeof(DeclaredGenericMethodStruct), GenericVirtualMethodCalls.RunForeignInterfaceDeclaredStruct());
+        Assert.Equal(typeof(ForeignGenericTypeMethodClass<int>), GenericTypeVirtualMethodCalls.RunDeclaredInterfaceForeignType());
+        Assert.Equal(typeof(DeclaredGenericTypeMethodClass<int>), GenericTypeVirtualMethodCalls.RunForeignInterfaceDeclaredType());
+        Assert.Equal(typeof(ForeignGenericTypeMethodClass<string>), SharedGenericTypeVirtualMethodCalls.RunDeclaredInterfaceForeignType());
+        Assert.Equal(typeof(DeclaredGenericTypeMethodClass<string>), SharedGenericTypeVirtualMethodCalls.RunForeignInterfaceDeclaredType());
     }
 
     public static void CanonicalBodiesSupportConstrainedAndStaticCalls()
     {
-        Assert.Equal(55, Stage2Calls.DirectReferenceCall(new DevirtualizationTarget(55)));
-        Assert.Throws<NullReferenceException>(() => Stage2Calls.DirectReferenceCall(null!));
+        Assert.Equal(55, CanonicalCalls.DirectReferenceCall(new DevirtualizationTarget(55)));
+        Assert.Throws<NullReferenceException>(() => CanonicalCalls.DirectReferenceCall(null!));
 
-        Assert.Equal(11, Stage2Calls.RunValueConstraint());
+        Assert.Equal(11, CanonicalCalls.RunValueConstraint());
         Assert.True(typeof(IValueOwned).IsAssignableFrom(typeof(ValueTarget)));
         Assert.Equal(typeof(ValueTarget),
             typeof(ValueConstraintHolder<>).MakeGenericType(typeof(ValueTarget)).GetGenericArguments()[0]);
 
-        Assert.Equal(21, Stage2GenericValueCalls.Run());
+        Assert.Equal(21, GenericValueCalls.Run());
         Type applicableGenericValue = typeof(GenericValueTarget<TypeOwnedTarget>);
         Assert.True(typeof(IValueOwned).IsAssignableFrom(applicableGenericValue));
         Assert.Equal(applicableGenericValue,
@@ -220,12 +240,12 @@ public static class ExtensionInterfaceTests
         Assert.Throws<ArgumentException>(() =>
             typeof(ValueConstraintHolder<>).MakeGenericType(typeof(GenericValueTarget<string>)));
 
-        Assert.Equal(42, Stage2Calls.RunStaticConstraint());
+        Assert.Equal(42, CanonicalCalls.RunStaticConstraint());
         Assert.True(typeof(IStaticOwned).IsAssignableFrom(typeof(StaticTarget)));
         Assert.Equal(typeof(StaticTarget),
             typeof(StaticConstraintHolder<>).MakeGenericType(typeof(StaticTarget)).GetGenericArguments()[0]);
 
-        Assert.Equal(43, Stage2ReferenceCalls.RunStaticConstraint());
+        Assert.Equal(43, ReferenceCalls.RunStaticConstraint());
         Assert.True(typeof(IStaticOwned).IsAssignableFrom(typeof(StaticReferenceTarget)));
         Assert.Equal(typeof(StaticReferenceTarget),
             typeof(StaticConstraintHolder<>).MakeGenericType(typeof(StaticReferenceTarget)).GetGenericArguments()[0]);
@@ -252,11 +272,11 @@ public static class ExtensionInterfaceTests
         // code when the test is run with tiering and dynamic PGO enabled.
         for (int i = 0; i < Iterations; i++)
         {
-            checksum += Stage2Calls.DirectReferenceCall(devirtualized);
-            checksum += Stage2Calls.RunValueConstraint();
-            checksum += Stage2GenericValueCalls.Run();
-            checksum += Stage2Calls.RunStaticConstraint();
-            checksum += Stage2ReferenceCalls.RunStaticConstraint();
+            checksum += CanonicalCalls.DirectReferenceCall(devirtualized);
+            checksum += CanonicalCalls.RunValueConstraint();
+            checksum += GenericValueCalls.Run();
+            checksum += CanonicalCalls.RunStaticConstraint();
+            checksum += ReferenceCalls.RunStaticConstraint();
             boxedView.Increment();
         }
 
@@ -267,15 +287,15 @@ public static class ExtensionInterfaceTests
         // receiver paths do not allocate a box in steady state.
         for (int i = 0; i < 100; i++)
         {
-            GC.KeepAlive(Stage2Calls.RunValueConstraint());
-            GC.KeepAlive(Stage2GenericValueCalls.Run());
+            GC.KeepAlive(CanonicalCalls.RunValueConstraint());
+            GC.KeepAlive(GenericValueCalls.Run());
         }
 
         long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
         for (int i = 0; i < 100_000; i++)
         {
-            checksum += Stage2Calls.RunValueConstraint();
-            checksum += Stage2GenericValueCalls.Run();
+            checksum += CanonicalCalls.RunValueConstraint();
+            checksum += GenericValueCalls.Run();
         }
         long allocatedAfter = GC.GetAllocatedBytesForCurrentThread();
         Assert.Equal(0L, allocatedAfter - allocatedBefore);

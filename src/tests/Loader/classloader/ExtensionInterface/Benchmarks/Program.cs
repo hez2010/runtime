@@ -347,7 +347,7 @@ internal static class ExtensionOperations
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    public static int ExactDevirtualization() => Stage2Calls.DirectReferenceCall(s_devirtualizationTarget);
+    public static int ExactDevirtualization() => CanonicalCalls.DirectReferenceCall(s_devirtualizationTarget);
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     public static int ReferenceConstraint() => s_referenceConstraint(s_referenceTarget);

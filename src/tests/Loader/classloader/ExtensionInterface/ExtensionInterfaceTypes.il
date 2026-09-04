@@ -11,160 +11,219 @@
 // Prototype manifest rows have the same logical fields as ExtensionInterfaceImpl:
 //   int32 Owner, int32 Implementation, byte[] Target, byte[] Interface, uint16 Flags.
 // The signature arrays are ordinary CLI type signatures in the witness generic context.
+// Each byte[] is a four-byte element count followed by its signature bytes. The signatures
+// below use ELEMENT_TYPE_VALUETYPE (11), CLASS (12), VAR (13), and GENERICINST (15).
+// CLASS and VALUETYPE are followed by a compressed TypeDefOrRef token.
 // TypeOwnedTarget : ITypeOwned -> TypeOwnedWitness
 .custom instance void System.Runtime.CompilerServices.ExtensionInterfaceImplAttribute::.ctor(int32, int32, uint8[], uint8[], uint16) = (
-    01 00
-    08 00 00 02
-    0B 00 00 02
-    02 00 00 00 12 20
-    02 00 00 00 12 10
-    01 00
-    00 00
+    01 00                         // Custom attribute prolog
+    08 00 00 02                   // Owner: TypeDef 0x02000008 (TypeOwnedTarget)
+    0B 00 00 02                   // Implementation: TypeDef 0x0200000B (TypeOwnedWitness)
+    02 00 00 00 12 20             // Target: CLASS TypeOwnedTarget
+    02 00 00 00 12 10             // Interface: CLASS ITypeOwned
+    01 00                         // Flags: TypeOwned
+    00 00                         // Named argument count: 0
 )
 // ConditionalTarget<T> : IConditional -> ConditionalWitness<T>
 .custom instance void System.Runtime.CompilerServices.ExtensionInterfaceImplAttribute::.ctor(int32, int32, uint8[], uint8[], uint16) = (
-    01 00
-    11 00 00 02
-    12 00 00 02
-    06 00 00 00 15 12 44 01 13 00
-    02 00 00 00 12 40
-    01 00
-    00 00
+    01 00                         // Custom attribute prolog
+    11 00 00 02                   // Owner: TypeDef 0x02000011 (ConditionalTarget`1)
+    12 00 00 02                   // Implementation: TypeDef 0x02000012 (ConditionalWitness`1)
+    06 00 00 00 15 12 44 01 13 00 // Target: GENERICINST CLASS ConditionalTarget`1<VAR 0>
+    02 00 00 00 12 40             // Interface: CLASS IConditional
+    01 00                         // Flags: TypeOwned
+    00 00                         // Named argument count: 0
 )
 // ValueTarget : IValueOwned -> ValueWitness
 .custom instance void System.Runtime.CompilerServices.ExtensionInterfaceImplAttribute::.ctor(int32, int32, uint8[], uint8[], uint16) = (
-    01 00
-    0E 00 00 02
-    0F 00 00 02
-    02 00 00 00 11 38
-    02 00 00 00 12 34
-    01 00
-    00 00
+    01 00                         // Custom attribute prolog
+    0E 00 00 02                   // Owner: TypeDef 0x0200000E (ValueTarget)
+    0F 00 00 02                   // Implementation: TypeDef 0x0200000F (ValueWitness)
+    02 00 00 00 11 38             // Target: VALUETYPE ValueTarget
+    02 00 00 00 12 34             // Interface: CLASS IValueOwned
+    01 00                         // Flags: TypeOwned
+    00 00                         // Named argument count: 0
 )
 // T : IInterfaceOwned -> InterfaceOwnedWitness<T>
 .custom instance void System.Runtime.CompilerServices.ExtensionInterfaceImplAttribute::.ctor(int32, int32, uint8[], uint8[], uint16) = (
-    01 00
-    06 00 00 02
-    0C 00 00 02
-    02 00 00 00 13 00
-    02 00 00 00 12 18
-    02 00
-    00 00
+    01 00                         // Custom attribute prolog
+    06 00 00 02                   // Owner: TypeDef 0x02000006 (IInterfaceOwned)
+    0C 00 00 02                   // Implementation: TypeDef 0x0200000C (InterfaceOwnedWitness`1)
+    02 00 00 00 13 00             // Target: VAR 0 (the witness type parameter T)
+    02 00 00 00 12 18             // Interface: CLASS IInterfaceOwned
+    02 00                         // Flags: InterfaceOwned
+    00 00                         // Named argument count: 0
 )
 // T : ISelfJustifying -> SelfJustifyingWitness<T>
 .custom instance void System.Runtime.CompilerServices.ExtensionInterfaceImplAttribute::.ctor(int32, int32, uint8[], uint8[], uint16) = (
-    01 00
-    13 00 00 02
-    14 00 00 02
-    02 00 00 00 13 00
-    02 00 00 00 12 4C
-    02 00
-    00 00
+    01 00                         // Custom attribute prolog
+    13 00 00 02                   // Owner: TypeDef 0x02000013 (ISelfJustifying)
+    14 00 00 02                   // Implementation: TypeDef 0x02000014 (SelfJustifyingWitness`1)
+    02 00 00 00 13 00             // Target: VAR 0 (the witness type parameter T)
+    02 00 00 00 12 4C             // Interface: CLASS ISelfJustifying
+    02 00                         // Flags: InterfaceOwned
+    00 00                         // Named argument count: 0
 )
 // The two AmbiguousTarget rows deliberately violate coherence.
 .custom instance void System.Runtime.CompilerServices.ExtensionInterfaceImplAttribute::.ctor(int32, int32, uint8[], uint8[], uint16) = (
-    01 00
-    16 00 00 02
-    17 00 00 02
-    02 00 00 00 12 58
-    02 00 00 00 12 54
-    01 00
-    00 00
+    01 00                         // Custom attribute prolog
+    16 00 00 02                   // Owner: TypeDef 0x02000016 (AmbiguousTarget)
+    17 00 00 02                   // Implementation: TypeDef 0x02000017 (AmbiguousWitnessA)
+    02 00 00 00 12 58             // Target: CLASS AmbiguousTarget
+    02 00 00 00 12 54             // Interface: CLASS IAmbiguous
+    01 00                         // Flags: TypeOwned
+    00 00                         // Named argument count: 0
 )
 .custom instance void System.Runtime.CompilerServices.ExtensionInterfaceImplAttribute::.ctor(int32, int32, uint8[], uint8[], uint16) = (
-    01 00
-    16 00 00 02
-    18 00 00 02
-    02 00 00 00 12 58
-    02 00 00 00 12 54
-    01 00
-    00 00
+    01 00                         // Custom attribute prolog
+    16 00 00 02                   // Owner: TypeDef 0x02000016 (AmbiguousTarget)
+    18 00 00 02                   // Implementation: TypeDef 0x02000018 (AmbiguousWitnessB)
+    02 00 00 00 12 58             // Target: CLASS AmbiguousTarget
+    02 00 00 00 12 54             // Interface: CLASS IAmbiguous
+    01 00                         // Flags: TypeOwned
+    00 00                         // Named argument count: 0
 )
 
 // DevirtualizationTarget : IDevirtualized -> DevirtualizationWitness
 .custom instance void System.Runtime.CompilerServices.ExtensionInterfaceImplAttribute::.ctor(int32, int32, uint8[], uint8[], uint16) = (
-    01 00
-    1A 00 00 02
-    1B 00 00 02
-    02 00 00 00 12 68
-    02 00 00 00 12 64
-    01 00
-    00 00
+    01 00                         // Custom attribute prolog
+    1A 00 00 02                   // Owner: TypeDef 0x0200001A (DevirtualizationTarget)
+    1B 00 00 02                   // Implementation: TypeDef 0x0200001B (DevirtualizationWitness)
+    02 00 00 00 12 68             // Target: CLASS DevirtualizationTarget
+    02 00 00 00 12 64             // Interface: CLASS IDevirtualized
+    01 00                         // Flags: TypeOwned
+    00 00                         // Named argument count: 0
 )
 // StaticTarget : IStaticOwned -> StaticWitness
 .custom instance void System.Runtime.CompilerServices.ExtensionInterfaceImplAttribute::.ctor(int32, int32, uint8[], uint8[], uint16) = (
-    01 00
-    1D 00 00 02
-    1E 00 00 02
-    02 00 00 00 11 74
-    02 00 00 00 12 70
-    01 00
-    00 00
+    01 00                         // Custom attribute prolog
+    1D 00 00 02                   // Owner: TypeDef 0x0200001D (StaticTarget)
+    1E 00 00 02                   // Implementation: TypeDef 0x0200001E (StaticWitness)
+    02 00 00 00 11 74             // Target: VALUETYPE StaticTarget
+    02 00 00 00 12 70             // Interface: CLASS IStaticOwned
+    01 00                         // Flags: TypeOwned
+    00 00                         // Named argument count: 0
 )
 // StaticReferenceTarget : IStaticOwned -> StaticReferenceWitness
 .custom instance void System.Runtime.CompilerServices.ExtensionInterfaceImplAttribute::.ctor(int32, int32, uint8[], uint8[], uint16) = (
-    01 00
-    20 00 00 02
-    21 00 00 02
-    03 00 00 00 12 80 80
-    02 00 00 00 12 70
-    01 00
-    00 00
+    01 00                         // Custom attribute prolog
+    20 00 00 02                   // Owner: TypeDef 0x02000020 (StaticReferenceTarget)
+    21 00 00 02                   // Implementation: TypeDef 0x02000021 (StaticReferenceWitness)
+    03 00 00 00 12 80 80          // Target: CLASS StaticReferenceTarget
+    02 00 00 00 12 70             // Interface: CLASS IStaticOwned
+    01 00                         // Flags: TypeOwned
+    00 00                         // Named argument count: 0
 )
 // GenericValueTarget<T> : IValueOwned -> GenericValueWitness<T> where T : ITypeOwned
 .custom instance void System.Runtime.CompilerServices.ExtensionInterfaceImplAttribute::.ctor(int32, int32, uint8[], uint8[], uint16) = (
-    01 00
-    23 00 00 02
-    24 00 00 02
-    07 00 00 00 15 11 80 8C 01 13 00
-    02 00 00 00 12 34
-    01 00
-    00 00
+    01 00                         // Custom attribute prolog
+    23 00 00 02                   // Owner: TypeDef 0x02000023 (GenericValueTarget`1)
+    24 00 00 02                   // Implementation: TypeDef 0x02000024 (GenericValueWitness`1)
+    07 00 00 00 15 11 80 8C 01 13 00 // Target: GENERICINST VALUETYPE GenericValueTarget`1<VAR 0>
+    02 00 00 00 12 34             // Interface: CLASS IValueOwned
+    01 00                         // Flags: TypeOwned
+    00 00                         // Named argument count: 0
 )
 
 // Prototype ExtensionInterfaceMethodImpl rows:
 //   int32 Implementation, int32 Declaration, int32 Body.
 .custom instance void System.Runtime.CompilerServices.ExtensionInterfaceMethodImplAttribute::.ctor(int32, int32, int32) = (
-    01 00 0B 00 00 02 03 00 00 06 0C 00 00 06 00 00
+    01 00       // Custom attribute prolog
+    0B 00 00 02 // Implementation: TypeDef 0x0200000B (TypeOwnedWitness)
+    03 00 00 06 // Declaration: MethodDef 0x06000003 (ITypeOwned.GetValue)
+    0C 00 00 06 // Body: MethodDef 0x0600000C (TypeOwnedWitness.GetValueBody)
+    00 00       // Named argument count: 0
 )
 .custom instance void System.Runtime.CompilerServices.ExtensionInterfaceMethodImplAttribute::.ctor(int32, int32, int32) = (
-    01 00 0C 00 00 02 05 00 00 06 0E 00 00 06 00 00
+    01 00       // Custom attribute prolog
+    0C 00 00 02 // Implementation: TypeDef 0x0200000C (InterfaceOwnedWitness`1)
+    05 00 00 06 // Declaration: MethodDef 0x06000005 (IInterfaceOwned.GetText)
+    0E 00 00 06 // Body: MethodDef 0x0600000E (InterfaceOwnedWitness`1.GetTextBody)
+    00 00       // Named argument count: 0
 )
 .custom instance void System.Runtime.CompilerServices.ExtensionInterfaceMethodImplAttribute::.ctor(int32, int32, int32) = (
-    01 00 0C 00 00 02 04 00 00 06 10 00 00 06 00 00
+    01 00       // Custom attribute prolog
+    0C 00 00 02 // Implementation: TypeDef 0x0200000C (InterfaceOwnedWitness`1)
+    04 00 00 06 // Declaration: MethodDef 0x06000004 (IBaseExtensionInterface.GetBaseValue)
+    10 00 00 06 // Body: MethodDef 0x06000010 (InterfaceOwnedWitness`1.GetBaseValueBody)
+    00 00       // Named argument count: 0
 )
 .custom instance void System.Runtime.CompilerServices.ExtensionInterfaceMethodImplAttribute::.ctor(int32, int32, int32) = (
-    01 00 0F 00 00 02 11 00 00 06 14 00 00 06 00 00
+    01 00       // Custom attribute prolog
+    0F 00 00 02 // Implementation: TypeDef 0x0200000F (ValueWitness)
+    11 00 00 06 // Declaration: MethodDef 0x06000011 (IValueOwned.GetValue)
+    14 00 00 06 // Body: MethodDef 0x06000014 (ValueWitness.GetValueBody)
+    00 00       // Named argument count: 0
 )
 .custom instance void System.Runtime.CompilerServices.ExtensionInterfaceMethodImplAttribute::.ctor(int32, int32, int32) = (
-    01 00 0F 00 00 02 12 00 00 06 16 00 00 06 00 00
+    01 00       // Custom attribute prolog
+    0F 00 00 02 // Implementation: TypeDef 0x0200000F (ValueWitness)
+    12 00 00 06 // Declaration: MethodDef 0x06000012 (IValueOwned.Increment)
+    16 00 00 06 // Body: MethodDef 0x06000016 (ValueWitness.IncrementBody)
+    00 00       // Named argument count: 0
 )
 .custom instance void System.Runtime.CompilerServices.ExtensionInterfaceMethodImplAttribute::.ctor(int32, int32, int32) = (
-    01 00 12 00 00 02 17 00 00 06 1A 00 00 06 00 00
+    01 00       // Custom attribute prolog
+    12 00 00 02 // Implementation: TypeDef 0x02000012 (ConditionalWitness`1)
+    17 00 00 06 // Declaration: MethodDef 0x06000017 (IConditional.GetValue)
+    1A 00 00 06 // Body: MethodDef 0x0600001A (ConditionalWitness`1.GetValueBody)
+    00 00       // Named argument count: 0
 )
 .custom instance void System.Runtime.CompilerServices.ExtensionInterfaceMethodImplAttribute::.ctor(int32, int32, int32) = (
-    01 00 14 00 00 02 1B 00 00 06 1D 00 00 06 00 00
+    01 00       // Custom attribute prolog
+    14 00 00 02 // Implementation: TypeDef 0x02000014 (SelfJustifyingWitness`1)
+    1B 00 00 06 // Declaration: MethodDef 0x0600001B (ISelfJustifying.GetValue)
+    1D 00 00 06 // Body: MethodDef 0x0600001D (SelfJustifyingWitness`1.GetValueBody)
+    00 00       // Named argument count: 0
 )
 .custom instance void System.Runtime.CompilerServices.ExtensionInterfaceMethodImplAttribute::.ctor(int32, int32, int32) = (
-    01 00 17 00 00 02 1E 00 00 06 21 00 00 06 00 00
+    01 00       // Custom attribute prolog
+    17 00 00 02 // Implementation: TypeDef 0x02000017 (AmbiguousWitnessA)
+    1E 00 00 06 // Declaration: MethodDef 0x0600001E (IAmbiguous.GetValue)
+    21 00 00 06 // Body: MethodDef 0x06000021 (AmbiguousWitnessA.GetValueBody)
+    00 00       // Named argument count: 0
 )
 .custom instance void System.Runtime.CompilerServices.ExtensionInterfaceMethodImplAttribute::.ctor(int32, int32, int32) = (
-    01 00 18 00 00 02 1E 00 00 06 23 00 00 06 00 00
+    01 00       // Custom attribute prolog
+    18 00 00 02 // Implementation: TypeDef 0x02000018 (AmbiguousWitnessB)
+    1E 00 00 06 // Declaration: MethodDef 0x0600001E (IAmbiguous.GetValue)
+    23 00 00 06 // Body: MethodDef 0x06000023 (AmbiguousWitnessB.GetValueBody)
+    00 00       // Named argument count: 0
 )
 .custom instance void System.Runtime.CompilerServices.ExtensionInterfaceMethodImplAttribute::.ctor(int32, int32, int32) = (
-    01 00 1B 00 00 02 24 00 00 06 27 00 00 06 00 00
+    01 00       // Custom attribute prolog
+    1B 00 00 02 // Implementation: TypeDef 0x0200001B (DevirtualizationWitness)
+    24 00 00 06 // Declaration: MethodDef 0x06000024 (IDevirtualized.GetValue)
+    27 00 00 06 // Body: MethodDef 0x06000027 (DevirtualizationWitness.GetValueBody)
+    00 00       // Named argument count: 0
 )
 .custom instance void System.Runtime.CompilerServices.ExtensionInterfaceMethodImplAttribute::.ctor(int32, int32, int32) = (
-    01 00 1E 00 00 02 28 00 00 06 29 00 00 06 00 00
+    01 00       // Custom attribute prolog
+    1E 00 00 02 // Implementation: TypeDef 0x0200001E (StaticWitness)
+    28 00 00 06 // Declaration: MethodDef 0x06000028 (IStaticOwned.Create)
+    29 00 00 06 // Body: MethodDef 0x06000029 (StaticWitness.CreateBody)
+    00 00       // Named argument count: 0
 )
 .custom instance void System.Runtime.CompilerServices.ExtensionInterfaceMethodImplAttribute::.ctor(int32, int32, int32) = (
-    01 00 21 00 00 02 28 00 00 06 30 00 00 06 00 00
+    01 00       // Custom attribute prolog
+    21 00 00 02 // Implementation: TypeDef 0x02000021 (StaticReferenceWitness)
+    28 00 00 06 // Declaration: MethodDef 0x06000028 (IStaticOwned.Create)
+    30 00 00 06 // Body: MethodDef 0x06000030 (StaticReferenceWitness.CreateBody)
+    00 00       // Named argument count: 0
 )
 .custom instance void System.Runtime.CompilerServices.ExtensionInterfaceMethodImplAttribute::.ctor(int32, int32, int32) = (
-    01 00 24 00 00 02 11 00 00 06 34 00 00 06 00 00
+    01 00       // Custom attribute prolog
+    24 00 00 02 // Implementation: TypeDef 0x02000024 (GenericValueWitness`1)
+    11 00 00 06 // Declaration: MethodDef 0x06000011 (IValueOwned.GetValue)
+    34 00 00 06 // Body: MethodDef 0x06000034 (GenericValueWitness`1.GetValueBody)
+    00 00       // Named argument count: 0
 )
 .custom instance void System.Runtime.CompilerServices.ExtensionInterfaceMethodImplAttribute::.ctor(int32, int32, int32) = (
-    01 00 24 00 00 02 12 00 00 06 36 00 00 06 00 00
+    01 00       // Custom attribute prolog
+    24 00 00 02 // Implementation: TypeDef 0x02000024 (GenericValueWitness`1)
+    12 00 00 06 // Declaration: MethodDef 0x06000012 (IValueOwned.Increment)
+    36 00 00 06 // Body: MethodDef 0x06000036 (GenericValueWitness`1.IncrementBody)
+    00 00       // Named argument count: 0
 )
 
 .class private auto ansi sealed beforefieldinit System.Runtime.CompilerServices.ExtensionInterfaceImplAttribute

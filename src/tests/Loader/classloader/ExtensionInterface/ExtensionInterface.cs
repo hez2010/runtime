@@ -21,6 +21,8 @@ public static class ExtensionInterfaceTests
         BoxedValueTypeUsesTheOriginalBox();
         Console.WriteLine("constraints");
         ConditionalGenericsUseExtensionAwareConstraints();
+        Console.WriteLine("generic-identity");
+        ConstrainedGenericParametersRetainOriginalTypes();
         Console.WriteLine("stage2");
         CanonicalBodiesSupportConstrainedAndStaticCalls();
         Console.WriteLine("coherence");
@@ -156,6 +158,47 @@ public static class ExtensionInterfaceTests
 
     private sealed class ConstraintHolder<T> where T : ITypeOwned
     {
+    }
+
+    public static void ConstrainedGenericParametersRetainOriginalTypes()
+    {
+        VerifyConstrainedTypeIdentity(
+            nameof(GetReferenceTypeThroughConstraint),
+            typeof(TypeOwnedTarget),
+            new TypeOwnedTarget(42));
+        VerifyConstrainedTypeIdentity(
+            nameof(GetValueTypeThroughConstraint),
+            typeof(ValueTarget),
+            new ValueTarget { Value = 42 });
+    }
+
+    private delegate Type TypeIdentityFunc<T>(T value);
+
+    private static void VerifyConstrainedTypeIdentity<T>(string methodName, Type expectedType, T value)
+    {
+        Assert.Equal(expectedType, typeof(T));
+
+        MethodInfo definition = typeof(ExtensionInterfaceTests)
+            .GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Static)!;
+        Assert.Equal(1, definition.GetGenericArguments().Length);
+
+        MethodInfo method = definition.MakeGenericMethod(typeof(T));
+        Assert.Equal(expectedType, method.GetGenericArguments()[0]);
+
+        var getType = (TypeIdentityFunc<T>)method.CreateDelegate(typeof(TypeIdentityFunc<T>));
+        Assert.Equal(expectedType, getType(value));
+    }
+
+    private static Type GetReferenceTypeThroughConstraint<T>(T value) where T : ITypeOwned
+    {
+        _ = value.GetValue();
+        return typeof(T);
+    }
+
+    private static Type GetValueTypeThroughConstraint<T>(T value) where T : IValueOwned
+    {
+        _ = value.GetValue();
+        return typeof(T);
     }
 
     public static void CanonicalBodiesSupportConstrainedAndStaticCalls()

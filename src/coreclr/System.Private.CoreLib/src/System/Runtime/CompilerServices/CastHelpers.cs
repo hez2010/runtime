@@ -207,7 +207,7 @@ namespace System.Runtime.CompilerServices
         }
 
         [DebuggerHidden]
-        [MethodImpl(MethodImplOptions.NoInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static object? IsInstance_Helper(void* toTypeHnd, object obj)
         {
             CastResult result = CastCache.TryGet(s_table!, (nuint)RuntimeHelpers.GetMethodTable(obj), (nuint)toTypeHnd);

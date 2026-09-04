@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net11.0</TargetFramework>
+    <LangVersion>preview</LangVersion>
+    <Nullable>enable</Nullable>
+    <Optimize>true</Optimize>
+    <GenerateDependencyFile>true</GenerateDependencyFile>
+    <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <ImportDirectoryBuildTargets>false</ImportDirectoryBuildTargets>
+    <RequiresProcessIsolation>true</RequiresProcessIsolation>
+    <ReferenceXUnitWrapperGenerator>false</ReferenceXUnitWrapperGenerator>
+    <CLRTestKind>BuildOnly</CLRTestKind>
+    <BenchmarkDotNetVersion>0.16.0-nightly.20260816.607</BenchmarkDotNetVersion>
+    <BenchmarkDotNetWeaveAssemblyPath>$(IntermediateOutputPath)ExtensionInterfaceBenchmarks.dll</BenchmarkDotNetWeaveAssemblyPath>
+    <ExtensionInterfaceBenchmark Condition="'$(ExtensionInterfaceBenchmark)' == ''">true</ExtensionInterfaceBenchmark>
+    <DefineConstants Condition="'$(ExtensionInterfaceBenchmark)' == 'true'">$(DefineConstants);EXTENSION_INTERFACE</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <PackageReference Include="BenchmarkDotNet" Version="$(BenchmarkDotNetVersion)" />
+    <PackageReference Include="BenchmarkDotNet.Annotations" Version="$(BenchmarkDotNetVersion)" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(ExtensionInterfaceBenchmark)' == 'true'">
+    <ProjectReference Include="..\ExtensionInterfaceTypes.ilproj" />
+  </ItemGroup>
+  <Import Project="$(NuGetPackageRoot)benchmarkdotnet.annotations\$(BenchmarkDotNetVersion)\buildTransitive\netstandard2.0\BenchmarkDotNet.Annotations.targets" />
+</Project>

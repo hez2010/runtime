@@ -771,6 +771,9 @@ private:
     // IL stub cache with fabricated MethodTable parented by this module.
     ILStubCache                *m_pILStubCache;
 
+    // Lazily allocated, loader-allocator-owned extension-interface metadata index.
+    Volatile<TADDR>             m_extensionInterfaceIndex;
+
     ULONG m_DefaultDllImportSearchPathsAttributeValue;
 public:
     LookupMap<PTR_MethodTable>::Iterator EnumerateTypeDefs()
@@ -1616,6 +1619,20 @@ public:
 
     BOOL                    HasDefaultDllImportSearchPathsAttribute();
     BOOL                    HasExtensionInterfaceImplementations();
+
+    TADDR GetExtensionInterfaceIndex()
+    {
+        LIMITED_METHOD_CONTRACT;
+        return m_extensionInterfaceIndex;
+    }
+
+#ifndef DACCESS_COMPILE
+    bool TrySetExtensionInterfaceIndex(TADDR index)
+    {
+        LIMITED_METHOD_CONTRACT;
+        return InterlockedCompareExchangeT(&m_extensionInterfaceIndex, index, (TADDR)0) == 0;
+    }
+#endif
 
     ULONG DefaultDllImportSearchPathsAttributeCachedValue()
     {

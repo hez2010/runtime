@@ -356,6 +356,7 @@ Module::Module(Assembly *pAssembly, PEAssembly *pPEAssembly)
     : m_pPEAssembly{pPEAssembly}
     , m_dwTransientFlags{CLASSES_FREED}
     , m_pAssembly{pAssembly}
+    , m_extensionInterfaceIndex{}
     , m_pDynamicMethodTable{NULL}
     , m_hExposedObject{}
 {

@@ -37,9 +37,9 @@ namespace
     {
         mdTypeDef owner;
         mdTypeDef implementation;
-        CQuickBytes targetSignature;
+        PCCOR_SIGNATURE targetSignature;
         ULONG targetSignatureSize;
-        CQuickBytes interfaceSignature;
+        PCCOR_SIGNATURE interfaceSignature;
         ULONG interfaceSignatureSize;
         UINT16 flags;
     };
@@ -49,6 +49,34 @@ namespace
         mdTypeDef implementation;
         mdToken declaration;
         mdMethodDef body;
+    };
+
+    struct RowReference
+    {
+        mdTypeDef key;
+        UINT32 rowIndex;
+    };
+
+    struct MethodIndex
+    {
+        MethodManifestRow* rows;
+        RowReference* implementationReferences;
+        UINT32 rowCount;
+    };
+
+    struct ModuleIndex
+    {
+        ManifestRow* rows;
+        RowReference* ownerReferences;
+        UINT32 rowCount;
+        UINT32 ownerReferenceCount;
+        Volatile<TADDR> methodIndex;
+
+        ModuleIndex()
+            : rows(nullptr), ownerReferences(nullptr), rowCount(0), ownerReferenceCount(0), methodIndex{}
+        {
+            LIMITED_METHOD_CONTRACT;
+        }
     };
 
     [[noreturn]] void ThrowInvalidManifest()
@@ -76,9 +104,9 @@ namespace
         *pSize = size;
     }
 
-    void ValidateTypeSignature(const CQuickBytes& signature, ULONG signatureSize)
+    void ValidateTypeSignature(PCCOR_SIGNATURE signature, ULONG signatureSize)
     {
-        SigParser parser(static_cast<PCCOR_SIGNATURE>(signature.Ptr()), signatureSize);
+        SigParser parser(signature, signatureSize);
         if (FAILED(parser.SkipExactlyOne()))
         {
             ThrowInvalidManifest();
@@ -93,7 +121,12 @@ namespace
         }
     }
 
-    void ParseManifestRow(const void* pBlob, ULONG blobSize, ManifestRow* pRow)
+    void ParseManifestRow(
+        const void* pBlob,
+        ULONG blobSize,
+        ManifestRow* pRow,
+        CQuickBytes* pTargetSignature,
+        CQuickBytes* pInterfaceSignature)
     {
         CustomAttributeParser parser(pBlob, blobSize);
         INT32 owner;
@@ -109,8 +142,10 @@ namespace
 
         pRow->owner = static_cast<mdTypeDef>(owner);
         pRow->implementation = static_cast<mdTypeDef>(implementation);
-        ReadByteArray(&parser, &pRow->targetSignature, &pRow->targetSignatureSize);
-        ReadByteArray(&parser, &pRow->interfaceSignature, &pRow->interfaceSignatureSize);
+        ReadByteArray(&parser, pTargetSignature, &pRow->targetSignatureSize);
+        ReadByteArray(&parser, pInterfaceSignature, &pRow->interfaceSignatureSize);
+        pRow->targetSignature = static_cast<PCCOR_SIGNATURE>(pTargetSignature->Ptr());
+        pRow->interfaceSignature = static_cast<PCCOR_SIGNATURE>(pInterfaceSignature->Ptr());
         ValidateTypeSignature(pRow->targetSignature, pRow->targetSignatureSize);
         ValidateTypeSignature(pRow->interfaceSignature, pRow->interfaceSignatureSize);
 
@@ -164,95 +199,6 @@ namespace
         }
     }
 
-    template <typename TAction>
-    void ForEachManifestRow(Module* pModule, TAction action)
-    {
-        CONTRACTL
-        {
-            THROWS;
-            GC_TRIGGERS;
-            MODE_ANY;
-        }
-        CONTRACTL_END;
-
-        if (!pModule->HasExtensionInterfaceImplementations())
-        {
-            return;
-        }
-
-        IMDInternalImport* pImport = pModule->GetMDImport();
-        MDEnumHolder hEnum(pImport);
-        HRESULT hr = pImport->EnumCustomAttributeByNameInit(
-            TokenFromRid(1, mdtModule),
-            g_ExtensionInterfaceImplAttribute,
-            &hEnum);
-        IfFailThrow(hr);
-
-        mdCustomAttribute attribute;
-        while (pImport->EnumNext(&hEnum, &attribute))
-        {
-            const void* pBlob;
-            ULONG blobSize;
-            IfFailThrow(pImport->GetCustomAttributeAsBlob(attribute, &pBlob, &blobSize));
-
-            ManifestRow row;
-            ParseManifestRow(pBlob, blobSize, &row);
-
-            DWORD ownerAttributes;
-            DWORD implementationAttributes;
-            if (!pImport->IsValidToken(row.owner) ||
-                !pImport->IsValidToken(row.implementation) ||
-                FAILED(pImport->GetTypeDefProps(row.owner, &ownerAttributes, NULL)) ||
-                FAILED(pImport->GetTypeDefProps(row.implementation, &implementationAttributes, NULL)) ||
-                !IsTdInterface(implementationAttributes) ||
-                (row.flags == ExtensionInterfaceImpl_InterfaceOwned && !IsTdInterface(ownerAttributes)))
-            {
-                ThrowInvalidManifest();
-            }
-
-            action(row);
-        }
-    }
-
-    template <typename TAction>
-    void ForEachMethodManifestRow(Module* pModule, TAction action)
-    {
-        CONTRACTL
-        {
-            THROWS;
-            GC_TRIGGERS;
-            MODE_ANY;
-        }
-        CONTRACTL_END;
-
-        IMDInternalImport* pImport = pModule->GetMDImport();
-        MDEnumHolder hEnum(pImport);
-        HRESULT hr = pImport->EnumCustomAttributeByNameInit(
-            TokenFromRid(1, mdtModule),
-            g_ExtensionInterfaceMethodImplAttribute,
-            &hEnum);
-        IfFailThrow(hr);
-
-        mdCustomAttribute attribute;
-        while (pImport->EnumNext(&hEnum, &attribute))
-        {
-            const void* pBlob;
-            ULONG blobSize;
-            IfFailThrow(pImport->GetCustomAttributeAsBlob(attribute, &pBlob, &blobSize));
-
-            MethodManifestRow row;
-            ParseMethodManifestRow(pBlob, blobSize, &row);
-            if (!pImport->IsValidToken(row.implementation) ||
-                !pImport->IsValidToken(row.declaration) ||
-                !pImport->IsValidToken(row.body))
-            {
-                ThrowInvalidManifest();
-            }
-
-            action(row);
-        }
-    }
-
     bool TryGetLocalTypeDefFromSignature(Module* pModule, mdToken token, mdTypeDef* pTypeDef)
     {
         LIMITED_METHOD_CONTRACT;
@@ -302,18 +248,47 @@ namespace
         return true;
     }
 
-    bool InterfaceDefinitionExtends(Module* pModule, mdTypeDef interfaceType, mdTypeDef baseInterfaceType, UINT32 depth = 0)
+    bool ContainsTypeDef(const StackSArray<mdTypeDef>& types, mdTypeDef type)
     {
-        WRAPPER_NO_CONTRACT;
+        LIMITED_METHOD_CONTRACT;
 
-        if (interfaceType == baseInterfaceType)
+        for (COUNT_T i = 0; i < types.GetCount(); i++)
         {
-            return true;
+            if (types[i] == type)
+            {
+                return true;
+            }
         }
 
+        return false;
+    }
+
+    void AppendInterfaceOwnerReferences(
+        Module* pModule,
+        mdTypeDef interfaceType,
+        UINT32 rowIndex,
+        StackSArray<mdTypeDef>* pVisited,
+        StackSArray<RowReference>* pReferences,
+        UINT32 depth = 0)
+    {
+        CONTRACTL
+        {
+            THROWS;
+            GC_NOTRIGGER;
+            MODE_ANY;
+        }
+        CONTRACTL_END;
+
+        if (ContainsTypeDef(*pVisited, interfaceType))
+        {
+            return;
+        }
+
+        pVisited->Append(interfaceType);
+        pReferences->Append(RowReference{interfaceType, rowIndex});
         if (depth == 64)
         {
-            return false;
+            return;
         }
 
         IMDInternalImport* pImport = pModule->GetMDImport();
@@ -330,14 +305,364 @@ namespace
             }
 
             mdTypeDef implementedInterfaceTypeDef;
-            if (TryGetLocalTypeDefFromSignature(pModule, implementedInterface, &implementedInterfaceTypeDef) &&
-                InterfaceDefinitionExtends(pModule, implementedInterfaceTypeDef, baseInterfaceType, depth + 1))
+            if (TryGetLocalTypeDefFromSignature(pModule, implementedInterface, &implementedInterfaceTypeDef))
             {
-                return true;
+                AppendInterfaceOwnerReferences(
+                    pModule,
+                    implementedInterfaceTypeDef,
+                    rowIndex,
+                    pVisited,
+                    pReferences,
+                    depth + 1);
+            }
+        }
+    }
+
+    int __cdecl CompareRowReferences(const void* pLeft, const void* pRight)
+    {
+        LIMITED_METHOD_CONTRACT;
+
+        const RowReference& left = *static_cast<const RowReference*>(pLeft);
+        const RowReference& right = *static_cast<const RowReference*>(pRight);
+        if (left.key != right.key)
+        {
+            return left.key < right.key ? -1 : 1;
+        }
+
+        if (left.rowIndex == right.rowIndex)
+        {
+            return 0;
+        }
+
+        return left.rowIndex < right.rowIndex ? -1 : 1;
+    }
+
+    PCCOR_SIGNATURE CopySignature(
+        LoaderHeap* pHeap,
+        AllocMemTracker* pTracker,
+        PCCOR_SIGNATURE pSignature,
+        ULONG signatureSize)
+    {
+        CONTRACTL
+        {
+            THROWS;
+            GC_NOTRIGGER;
+            MODE_ANY;
+        }
+        CONTRACTL_END;
+
+        BYTE* pCopy = static_cast<BYTE*>(pTracker->Track(pHeap->AllocMem(S_SIZE_T(signatureSize))));
+        memcpy(pCopy, pSignature, signatureSize);
+        return pCopy;
+    }
+
+    ModuleIndex* BuildModuleIndex(Module* pModule, AllocMemTracker* pTracker)
+    {
+        CONTRACTL
+        {
+            THROWS;
+            GC_TRIGGERS;
+            MODE_ANY;
+        }
+        CONTRACTL_END;
+
+        IMDInternalImport* pImport = pModule->GetMDImport();
+        MDEnumHolder hEnum(pImport);
+        IfFailThrow(pImport->EnumCustomAttributeByNameInit(
+            TokenFromRid(1, mdtModule),
+            g_ExtensionInterfaceImplAttribute,
+            &hEnum));
+
+        UINT32 rowCount = pImport->EnumGetCount(&hEnum);
+        LoaderHeap* pHeap = pModule->GetLoaderAllocator()->GetLowFrequencyHeap();
+        ModuleIndex* pIndex = static_cast<ModuleIndex*>(pTracker->Track(pHeap->AllocMem(S_SIZE_T(sizeof(ModuleIndex)))));
+        new (pIndex) ModuleIndex();
+
+        if (rowCount != 0)
+        {
+            pIndex->rows = static_cast<ManifestRow*>(
+                pTracker->Track(pHeap->AllocMem(S_SIZE_T(rowCount) * S_SIZE_T(sizeof(ManifestRow)))));
+        }
+        pIndex->rowCount = rowCount;
+
+        UINT32 rowIndex = 0;
+        mdCustomAttribute attribute;
+        while (pImport->EnumNext(&hEnum, &attribute))
+        {
+            _ASSERTE(rowIndex < rowCount);
+
+            const void* pBlob;
+            ULONG blobSize;
+            IfFailThrow(pImport->GetCustomAttributeAsBlob(attribute, &pBlob, &blobSize));
+
+            CQuickBytes targetSignature;
+            CQuickBytes interfaceSignature;
+            ManifestRow& row = pIndex->rows[rowIndex++];
+            ParseManifestRow(pBlob, blobSize, &row, &targetSignature, &interfaceSignature);
+
+            DWORD ownerAttributes;
+            DWORD implementationAttributes;
+            if (!pImport->IsValidToken(row.owner) ||
+                !pImport->IsValidToken(row.implementation) ||
+                FAILED(pImport->GetTypeDefProps(row.owner, &ownerAttributes, NULL)) ||
+                FAILED(pImport->GetTypeDefProps(row.implementation, &implementationAttributes, NULL)) ||
+                !IsTdInterface(implementationAttributes) ||
+                (row.flags == ExtensionInterfaceImpl_InterfaceOwned && !IsTdInterface(ownerAttributes)))
+            {
+                ThrowInvalidManifest();
+            }
+
+            row.targetSignature = CopySignature(
+                pHeap,
+                pTracker,
+                row.targetSignature,
+                row.targetSignatureSize);
+            row.interfaceSignature = CopySignature(
+                pHeap,
+                pTracker,
+                row.interfaceSignature,
+                row.interfaceSignatureSize);
+        }
+        _ASSERTE(rowIndex == rowCount);
+
+        StackSArray<RowReference> ownerReferences;
+        for (rowIndex = 0; rowIndex < rowCount; rowIndex++)
+        {
+            const ManifestRow& row = pIndex->rows[rowIndex];
+            if (row.flags == ExtensionInterfaceImpl_TypeOwned)
+            {
+                ownerReferences.Append(RowReference{row.owner, rowIndex});
+                continue;
+            }
+
+            StackSArray<mdTypeDef> visited;
+            AppendInterfaceOwnerReferences(
+                pModule,
+                row.owner,
+                rowIndex,
+                &visited,
+                &ownerReferences);
+        }
+
+        if (ownerReferences.GetCount() > UINT32_MAX)
+        {
+            ThrowInvalidManifest();
+        }
+
+        pIndex->ownerReferenceCount = static_cast<UINT32>(ownerReferences.GetCount());
+        if (pIndex->ownerReferenceCount != 0)
+        {
+            pIndex->ownerReferences = static_cast<RowReference*>(pTracker->Track(
+                pHeap->AllocMem(S_SIZE_T(pIndex->ownerReferenceCount) * S_SIZE_T(sizeof(RowReference)))));
+            memcpy(
+                pIndex->ownerReferences,
+                ownerReferences.GetElements(),
+                pIndex->ownerReferenceCount * sizeof(RowReference));
+            qsort(
+                pIndex->ownerReferences,
+                pIndex->ownerReferenceCount,
+                sizeof(RowReference),
+                CompareRowReferences);
+        }
+
+        return pIndex;
+    }
+
+    ModuleIndex* GetModuleIndex(Module* pModule)
+    {
+        CONTRACTL
+        {
+            THROWS;
+            GC_TRIGGERS;
+            MODE_ANY;
+        }
+        CONTRACTL_END;
+
+        TADDR currentIndex = pModule->GetExtensionInterfaceIndex();
+        if (currentIndex != 0)
+        {
+            return reinterpret_cast<ModuleIndex*>(currentIndex);
+        }
+
+        AllocMemTracker tracker;
+        ModuleIndex* pNewIndex = BuildModuleIndex(pModule, &tracker);
+        if (pModule->TrySetExtensionInterfaceIndex(reinterpret_cast<TADDR>(pNewIndex)))
+        {
+            tracker.SuppressRelease();
+            return pNewIndex;
+        }
+
+        return reinterpret_cast<ModuleIndex*>(pModule->GetExtensionInterfaceIndex());
+    }
+
+    MethodIndex* BuildMethodIndex(Module* pModule, AllocMemTracker* pTracker)
+    {
+        CONTRACTL
+        {
+            THROWS;
+            GC_TRIGGERS;
+            MODE_ANY;
+        }
+        CONTRACTL_END;
+
+        IMDInternalImport* pImport = pModule->GetMDImport();
+        MDEnumHolder hEnum(pImport);
+        IfFailThrow(pImport->EnumCustomAttributeByNameInit(
+            TokenFromRid(1, mdtModule),
+            g_ExtensionInterfaceMethodImplAttribute,
+            &hEnum));
+
+        UINT32 rowCount = pImport->EnumGetCount(&hEnum);
+        LoaderHeap* pHeap = pModule->GetLoaderAllocator()->GetLowFrequencyHeap();
+        MethodIndex* pIndex = static_cast<MethodIndex*>(pTracker->Track(pHeap->AllocMem(S_SIZE_T(sizeof(MethodIndex)))));
+        pIndex->rows = nullptr;
+        pIndex->implementationReferences = nullptr;
+        pIndex->rowCount = rowCount;
+
+        if (rowCount != 0)
+        {
+            pIndex->rows = static_cast<MethodManifestRow*>(
+                pTracker->Track(pHeap->AllocMem(S_SIZE_T(rowCount) * S_SIZE_T(sizeof(MethodManifestRow)))));
+            pIndex->implementationReferences = static_cast<RowReference*>(
+                pTracker->Track(pHeap->AllocMem(S_SIZE_T(rowCount) * S_SIZE_T(sizeof(RowReference)))));
+        }
+
+        UINT32 rowIndex = 0;
+        mdCustomAttribute attribute;
+        while (pImport->EnumNext(&hEnum, &attribute))
+        {
+            _ASSERTE(rowIndex < rowCount);
+
+            const void* pBlob;
+            ULONG blobSize;
+            IfFailThrow(pImport->GetCustomAttributeAsBlob(attribute, &pBlob, &blobSize));
+
+            MethodManifestRow& row = pIndex->rows[rowIndex];
+            ParseMethodManifestRow(pBlob, blobSize, &row);
+            if (!pImport->IsValidToken(row.implementation) ||
+                !pImport->IsValidToken(row.declaration) ||
+                !pImport->IsValidToken(row.body))
+            {
+                ThrowInvalidManifest();
+            }
+
+            pIndex->implementationReferences[rowIndex] = RowReference{row.implementation, rowIndex};
+            rowIndex++;
+        }
+        _ASSERTE(rowIndex == rowCount);
+
+        if (rowCount > 1)
+        {
+            qsort(
+                pIndex->implementationReferences,
+                rowCount,
+                sizeof(RowReference),
+                CompareRowReferences);
+        }
+
+        return pIndex;
+    }
+
+    MethodIndex* GetMethodIndex(Module* pModule)
+    {
+        CONTRACTL
+        {
+            THROWS;
+            GC_TRIGGERS;
+            MODE_ANY;
+        }
+        CONTRACTL_END;
+
+        ModuleIndex* pModuleIndex = GetModuleIndex(pModule);
+        TADDR currentIndex = pModuleIndex->methodIndex;
+        if (currentIndex != 0)
+        {
+            return reinterpret_cast<MethodIndex*>(currentIndex);
+        }
+
+        AllocMemTracker tracker;
+        MethodIndex* pNewIndex = BuildMethodIndex(pModule, &tracker);
+        currentIndex = InterlockedCompareExchangeT(
+            &pModuleIndex->methodIndex,
+            reinterpret_cast<TADDR>(pNewIndex),
+            (TADDR)0);
+        if (currentIndex == 0)
+        {
+            tracker.SuppressRelease();
+            return pNewIndex;
+        }
+
+        return reinterpret_cast<MethodIndex*>(currentIndex);
+    }
+
+    UINT32 FindFirstRowReference(const RowReference* pReferences, UINT32 referenceCount, mdTypeDef key)
+    {
+        LIMITED_METHOD_CONTRACT;
+
+        UINT32 low = 0;
+        UINT32 high = referenceCount;
+        while (low < high)
+        {
+            UINT32 middle = low + ((high - low) / 2);
+            if (pReferences[middle].key < key)
+            {
+                low = middle + 1;
+            }
+            else
+            {
+                high = middle;
             }
         }
 
-        return false;
+        return low;
+    }
+
+    template <typename TAction>
+    void ForEachManifestRow(Module* pModule, mdTypeDef owner, TAction action)
+    {
+        CONTRACTL
+        {
+            THROWS;
+            GC_TRIGGERS;
+            MODE_ANY;
+        }
+        CONTRACTL_END;
+
+        ModuleIndex* pIndex = GetModuleIndex(pModule);
+        UINT32 referenceIndex = FindFirstRowReference(
+            pIndex->ownerReferences,
+            pIndex->ownerReferenceCount,
+            owner);
+        while (referenceIndex < pIndex->ownerReferenceCount &&
+               pIndex->ownerReferences[referenceIndex].key == owner)
+        {
+            action(pIndex->rows[pIndex->ownerReferences[referenceIndex].rowIndex]);
+            referenceIndex++;
+        }
+    }
+
+    template <typename TAction>
+    void ForEachMethodManifestRow(Module* pModule, mdTypeDef implementation, TAction action)
+    {
+        CONTRACTL
+        {
+            THROWS;
+            GC_TRIGGERS;
+            MODE_ANY;
+        }
+        CONTRACTL_END;
+
+        MethodIndex* pIndex = GetMethodIndex(pModule);
+        UINT32 referenceIndex = FindFirstRowReference(
+            pIndex->implementationReferences,
+            pIndex->rowCount,
+            implementation);
+        while (referenceIndex < pIndex->rowCount &&
+               pIndex->implementationReferences[referenceIndex].key == implementation)
+        {
+            action(pIndex->rows[pIndex->implementationReferences[referenceIndex].rowIndex]);
+            referenceIndex++;
+        }
     }
 
     enum class SignatureRootKind
@@ -567,7 +892,7 @@ namespace
         CONTRACTL_END;
 
         SigParser pattern(
-            static_cast<PCCOR_SIGNATURE>(row.targetSignature.Ptr()),
+            row.targetSignature,
             row.targetSignatureSize);
         if (!MatchType(&pattern, pModule, projection, pBindings, bindingCount))
         {
@@ -841,7 +1166,7 @@ namespace
 
         *ppBodyMD = nullptr;
         Module* pModule = pWitnessMT->GetModule();
-        ForEachMethodManifestRow(pModule, [&](const MethodManifestRow& row)
+        ForEachMethodManifestRow(pModule, pWitnessMT->GetCl(), [&](const MethodManifestRow& row)
         {
             if (row.implementation != pWitnessMT->GetCl())
             {
@@ -997,7 +1322,7 @@ namespace
         UINT32 rootTypeVariableIndex = UINT32_MAX;
         SignatureRootKind targetRootKind = GetSignatureRoot(
             pModule,
-            static_cast<PCCOR_SIGNATURE>(row.targetSignature.Ptr()),
+            row.targetSignature,
             row.targetSignatureSize,
             &targetRoot,
             &rootTypeVariableIndex);
@@ -1076,7 +1401,7 @@ namespace
 
         SigTypeContext signatureContext(witnessInstantiation, Instantiation());
         TypeHandle declaredInterface = SigPointer(
-            static_cast<PCCOR_SIGNATURE>(row.interfaceSignature.Ptr()),
+            row.interfaceSignature,
             row.interfaceSignatureSize).GetTypeHandleThrowing(pModule, &signatureContext);
         if (declaredInterface.IsTypeDesc() || !declaredInterface.IsInterface())
         {
@@ -1086,7 +1411,7 @@ namespace
         TypeHandle interfaceRoot;
         SignatureRootKind interfaceRootKind = GetSignatureRoot(
             pModule,
-            static_cast<PCCOR_SIGNATURE>(row.interfaceSignature.Ptr()),
+            row.interfaceSignature,
             row.interfaceSignatureSize,
             &interfaceRoot);
         if (interfaceRootKind != SignatureRootKind::Nominal ||
@@ -1400,15 +1725,13 @@ void ExtensionInterface::SetMethodTableFlags(MethodTable* pMT)
     Module* pModule = pMT->GetModule();
     if (pModule->HasExtensionInterfaceImplementations())
     {
-        ForEachManifestRow(pModule, [&](const ManifestRow& row)
+        ForEachManifestRow(pModule, pMT->GetCl(), [&](const ManifestRow& row)
         {
             if (row.flags == ExtensionInterfaceImpl_TypeOwned && row.owner == pMT->GetCl())
             {
                 hasTypeOwnedExtensionImpls = true;
             }
-            else if (row.flags == ExtensionInterfaceImpl_InterfaceOwned &&
-                     pMT->IsInterface() &&
-                     InterfaceDefinitionExtends(pModule, row.owner, pMT->GetCl()))
+            else if (row.flags == ExtensionInterfaceImpl_InterfaceOwned && pMT->IsInterface())
             {
                 hasInterfaceOwnedExtensionImpls = true;
             }
@@ -1534,7 +1857,7 @@ static bool TryResolveInternal(
             continue;
         }
 
-        ForEachManifestRow(pProjectionModule, [&](const ManifestRow& row)
+        ForEachManifestRow(pProjectionModule, pProjectionMT->GetCl(), [&](const ManifestRow& row)
         {
             if (row.owner == pProjectionMT->GetCl())
             {
@@ -1555,10 +1878,9 @@ static bool TryResolveInternal(
     Module* pInterfaceModule = pInterfaceMT->GetModule();
     if (pInterfaceModule->HasExtensionInterfaceImplementations())
     {
-        ForEachManifestRow(pInterfaceModule, [&](const ManifestRow& row)
+        ForEachManifestRow(pInterfaceModule, pInterfaceMT->GetCl(), [&](const ManifestRow& row)
         {
-            if (row.flags != ExtensionInterfaceImpl_InterfaceOwned ||
-                !InterfaceDefinitionExtends(pInterfaceModule, row.owner, pInterfaceMT->GetCl()))
+            if (row.flags != ExtensionInterfaceImpl_InterfaceOwned)
             {
                 return;
             }
@@ -1566,7 +1888,7 @@ static bool TryResolveInternal(
             TypeHandle targetRoot;
             SignatureRootKind rootKind = GetSignatureRoot(
                 pInterfaceModule,
-                static_cast<PCCOR_SIGNATURE>(row.targetSignature.Ptr()),
+                row.targetSignature,
                 row.targetSignatureSize,
                 &targetRoot);
 
@@ -1676,7 +1998,7 @@ static bool TryResolveApproximateInternal(
             continue;
         }
 
-        ForEachManifestRow(pProjectionModule, [&](const ManifestRow& row)
+        ForEachManifestRow(pProjectionModule, pProjectionMT->GetCl(), [&](const ManifestRow& row)
         {
             if (row.owner == pProjectionMT->GetCl())
             {
@@ -1697,10 +2019,9 @@ static bool TryResolveApproximateInternal(
     Module* pInterfaceModule = pInterfaceMT->GetModule();
     if (pInterfaceModule->HasExtensionInterfaceImplementations())
     {
-        ForEachManifestRow(pInterfaceModule, [&](const ManifestRow& row)
+        ForEachManifestRow(pInterfaceModule, pInterfaceMT->GetCl(), [&](const ManifestRow& row)
         {
-            if (row.flags != ExtensionInterfaceImpl_InterfaceOwned ||
-                !InterfaceDefinitionExtends(pInterfaceModule, row.owner, pInterfaceMT->GetCl()))
+            if (row.flags != ExtensionInterfaceImpl_InterfaceOwned)
             {
                 return;
             }
@@ -1708,7 +2029,7 @@ static bool TryResolveApproximateInternal(
             TypeHandle targetRoot;
             SignatureRootKind rootKind = GetSignatureRoot(
                 pInterfaceModule,
-                static_cast<PCCOR_SIGNATURE>(row.targetSignature.Ptr()),
+                row.targetSignature,
                 row.targetSignatureSize,
                 &targetRoot);
             if (rootKind == SignatureRootKind::TypeVariable)

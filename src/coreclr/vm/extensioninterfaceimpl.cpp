@@ -985,6 +985,12 @@ namespace
             return false;
         }
 
+        if (leftType == ELEMENT_TYPE_MVAR)
+        {
+            return pLeft->GetLastTypeHandleThrowing().AsGenericVariable()->GetIndex() ==
+                pRight->GetLastTypeHandleThrowing().AsGenericVariable()->GetIndex();
+        }
+
         return CorTypeInfo::IsPrimitiveType(leftType) ||
             pLeft->GetLastTypeHandleThrowing().IsEquivalentTo(pRight->GetLastTypeHandleThrowing());
     }
@@ -998,6 +1004,12 @@ namespace
         if (leftType != rightType)
         {
             return false;
+        }
+
+        if (leftType == ELEMENT_TYPE_MVAR)
+        {
+            return pLeft->GetRetTypeHandleThrowing().AsGenericVariable()->GetIndex() ==
+                pRight->GetRetTypeHandleThrowing().AsGenericVariable()->GetIndex();
         }
 
         return CorTypeInfo::IsPrimitiveType(leftType) ||
@@ -1027,17 +1039,21 @@ namespace
                 row.declaration,
                 FALSE,
                 CLASS_LOAD_EXACTPARENTS);
-            if (!pDeclarationMD->GetMethodTable()->HasSameTypeDefAs(pInterfaceMT))
+            if (!pDeclarationMD->GetMethodTable()->HasSameTypeDefAs(pInterfaceMT) ||
+                !pDeclarationMD->HasSameMethodDefAs(pInterfaceMD))
             {
                 return nullptr;
             }
 
-            pDeclarationMD = MethodDesc::FindOrCreateAssociatedMethodDesc(
-                pDeclarationMD,
-                pInterfaceMT,
-                FALSE,
-                pInterfaceMD->GetMethodInstantiation(),
-                FALSE);
+            if (!pInterfaceMD->IsGenericMethodDefinition())
+            {
+                pDeclarationMD = MethodDesc::FindOrCreateAssociatedMethodDesc(
+                    pDeclarationMD,
+                    pInterfaceMT,
+                    FALSE,
+                    pInterfaceMD->GetMethodInstantiation(),
+                    FALSE);
+            }
         }
         else
         {
@@ -1055,12 +1071,33 @@ namespace
                 return nullptr;
             }
 
+            if (!pDeclarationMD->GetMethodTable()->HasSameTypeDefAs(pInterfaceMT) ||
+                !pDeclarationMD->HasSameMethodDefAs(pInterfaceMD))
+            {
+                return nullptr;
+            }
+
+            if (!pInterfaceMD->IsGenericMethodDefinition())
+            {
+                pDeclarationMD = MethodDesc::FindOrCreateAssociatedMethodDesc(
+                    pDeclarationMD->StripMethodInstantiation(),
+                    pDeclarationMD->GetMethodTable(),
+                    FALSE,
+                    pInterfaceMD->GetMethodInstantiation(),
+                    FALSE);
+            }
+        }
+
+        if (pInterfaceMD->IsGenericMethodDefinition() &&
+            pDeclarationMD->GetMethodTable() != pInterfaceMT)
+        {
             pDeclarationMD = MethodDesc::FindOrCreateAssociatedMethodDesc(
                 pDeclarationMD->StripMethodInstantiation(),
-                pDeclarationMD->GetMethodTable(),
+                pInterfaceMT,
                 FALSE,
                 pInterfaceMD->GetMethodInstantiation(),
-                FALSE);
+                FALSE,
+                TRUE);
         }
 
         if (pDeclarationMD->GetMethodTable() != pInterfaceMT ||
@@ -1199,11 +1236,15 @@ namespace
                 ThrowInvalidManifest();
             }
 
-            MethodDesc* pBodyMD = MemberLoader::GetMethodDescFromMethodDef(
-                pModule,
-                row.body,
-                pWitnessMT->GetInstantiation(),
-                pInterfaceMD->GetMethodInstantiation());
+            MethodDesc* pBodyMD = pBodyDefinition;
+            if (!pInterfaceMD->IsGenericMethodDefinition())
+            {
+                pBodyMD = MemberLoader::GetMethodDescFromMethodDef(
+                    pModule,
+                    row.body,
+                    pWitnessMT->GetInstantiation(),
+                    pInterfaceMD->GetMethodInstantiation());
+            }
             if (!ValidateCanonicalBodySignature(pTargetMT, pWitnessMT, pInterfaceMT, pInterfaceMD, pBodyMD))
             {
                 ThrowInvalidManifest();
@@ -1258,6 +1299,7 @@ namespace
             }
 
             DispatchSlot slot = pWitnessMT->FindDispatchSlotForInterfaceMD(
+                TypeHandle(pDeclaredInterfaceMT),
                 pInterfaceMethod,
                 FALSE /* throwOnConflict */);
             if (slot.IsNull() || slot.GetMethodDesc()->IsAbstract())

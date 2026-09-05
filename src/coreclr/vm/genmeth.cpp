@@ -396,7 +396,8 @@ InstantiatedMethodDesc::NewInstantiatedMethodDesc(MethodTable *pExactMT,
                                                   MethodDesc* pGenericMDescInRepMT,
                                                   MethodDesc* pWrappedMD,
                                                   Instantiation methodInst,
-                                                  BOOL getWrappedCode)
+                                                  BOOL getWrappedCode,
+                                                  ClassLoadLevel level)
 {
     CONTRACTL
     {
@@ -590,7 +591,9 @@ InstantiatedMethodDesc::NewInstantiatedMethodDesc(MethodTable *pExactMT,
     _ASSERTE(pNewMD != NULL);
     _ASSERTE(getWrappedCode == pNewMD->IsSharedByGenericInstantiations());
     _ASSERTE(methodInst.IsEmpty() || pNewMD->HasMethodInstantiation());
-    pNewMD->CheckRestore();
+    // Metadata validation can require a descriptor before the declaring type's
+    // constraints are fully validated. Preserve the caller's loading phase.
+    pNewMD->CheckRestore(level);
     return pNewMD;
 }
 #endif // !DACCESS_COMPILE
@@ -1183,7 +1186,8 @@ MethodDesc::FindOrCreateAssociatedMethodDesc(MethodDesc* pDefMD,
                                                                             pMDescInCanonMT,
                                                                             NULL,
                                                                             Instantiation(repInst, methodInst.GetNumArgs()),
-                                                                            TRUE);
+                                                                            TRUE,
+                                                                            level);
 #endif // !DACCESS_COMPILE
             }
         }
@@ -1225,7 +1229,8 @@ MethodDesc::FindOrCreateAssociatedMethodDesc(MethodDesc* pDefMD,
                                                                             pMDescInCanonMT,
                                                                             pWrappedMD,
                                                                             methodInst,
-                                                                            FALSE);
+                                                                            FALSE,
+                                                                            level);
 #endif // !DACCESS_COMPILE
             }
         }
@@ -1253,7 +1258,8 @@ MethodDesc::FindOrCreateAssociatedMethodDesc(MethodDesc* pDefMD,
                                                                             pMDescInCanonMT,
                                                                             NULL,
                                                                             methodInst,
-                                                                            FALSE);
+                                                                            FALSE,
+                                                                            level);
 #endif // !DACCESS_COMPILE
             }
         }

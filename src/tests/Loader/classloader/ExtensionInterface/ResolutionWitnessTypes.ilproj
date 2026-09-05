@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk.IL">
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="ResolutionWitnessTypes.il" />
+    <ProjectReference Include="ExtensionInterfaceForeignTypes.csproj" />
+    <ProjectReference Include="ResolutionBridgeTypes.ilproj" />
+  </ItemGroup>
+</Project>

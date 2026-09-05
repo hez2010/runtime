@@ -1474,7 +1474,8 @@ void GatherConstraintsRecursive(TypeVarTypeDesc *pTyArg, ArrayList *pArgList, co
 //                                    used when loading constraints attached to "thArg".
 //
 BOOL TypeVarTypeDesc::SatisfiesConstraints(SigTypeContext *pTypeContextOfConstraintDeclarer, TypeHandle thArg,
-                                           const InstantiationContext *pInstContext/*=NULL*/)
+                                           const InstantiationContext *pInstContext/*=NULL*/,
+                                           MethodTable *pValidatingInterfaceMT/*=nullptr*/)
 {
     CONTRACTL
     {
@@ -1635,6 +1636,13 @@ BOOL TypeVarTypeDesc::SatisfiesConstraints(SigTypeContext *pTypeContextOfConstra
 
                 if (thElem.IsGenericVariable())
                 {
+                    if (pValidatingInterfaceMT != nullptr && thConstraint.IsInterface() &&
+                        ExtensionInterface::IsContractValidationAssumption(
+                            pValidatingInterfaceMT, thElem, thConstraint.AsMethodTable()))
+                    {
+                        fCanCast = TRUE;
+                        break;
+                    }
                     // if a generic variable equals to the constraint, then this constraint will be satisfied
                     if (thElem == thConstraint)
                     {
@@ -1671,11 +1679,14 @@ BOOL TypeVarTypeDesc::SatisfiesConstraints(SigTypeContext *pTypeContextOfConstra
                         thConstraint.IsInterface() &&
                         !thElem.IsTypeDesc())
                     {
-                        MethodTable* pWitnessMT;
-                        satisfiesThroughExtension = ExtensionInterface::TryResolve(
-                            thElem.AsMethodTable(),
-                            thConstraint.AsMethodTable(),
-                            &pWitnessMT);
+                        satisfiesThroughExtension = pValidatingInterfaceMT != nullptr &&
+                            ExtensionInterface::IsContractValidationAssumption(
+                                pValidatingInterfaceMT, thElem, thConstraint.AsMethodTable());
+                        if (!satisfiesThroughExtension)
+                        {
+                            satisfiesThroughExtension = ExtensionInterface::SatisfiesConstraint(
+                                thElem.AsMethodTable(), thConstraint.AsMethodTable());
+                        }
                         satisfiesConstraint = satisfiesThroughExtension;
                     }
 

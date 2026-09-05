@@ -377,7 +377,8 @@ public:
 
     // Check the constraints on this type parameter hold in the supplied context for the supplied type
     BOOL SatisfiesConstraints(SigTypeContext *pTypeContext, TypeHandle thArg,
-                              const InstantiationContext *pInstContext = NULL);
+                              const InstantiationContext *pInstContext = NULL,
+                              MethodTable *pValidatingInterfaceMT = nullptr);
 
     // Check whether the constraints on this type force it to be a reference type (i.e. it is impossible
     // to instantiate it with a value type).

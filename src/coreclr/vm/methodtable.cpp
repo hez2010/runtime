@@ -1442,13 +1442,19 @@ BOOL MethodTable::ArraySupportsBizarreInterface(MethodTable * pInterfaceMT, Type
     if (this->IsMultiDimArray() ||
         !IsImplicitInterfaceOfSZArray(pInterfaceMT))
     {
-        CastCache::TryAddToCache(this, pInterfaceMT, FALSE);
+        if (!ExtensionInterface::IsExtensionSensitive(this, pInterfaceMT))
+        {
+            CastCache::TryAddToCache(this, pInterfaceMT, FALSE);
+        }
         return FALSE;
     }
 
     BOOL result = TypeDesc::CanCastParam(this->GetArrayElementTypeHandle(), pInterfaceMT->GetInstantiation()[0], pVisited);
 
-    CastCache::TryAddToCache(this, pInterfaceMT, (BOOL)result);
+    if (result || !ExtensionInterface::IsExtensionSensitive(this, pInterfaceMT))
+    {
+        CastCache::TryAddToCache(this, pInterfaceMT, (BOOL)result);
+    }
     return result;
 }
 
@@ -5436,12 +5442,10 @@ MethodTable::FindDispatchImpl(
             // even though semantically, these are static interfaces.)
             //
             // NOTE: CERs are not currently supported with generic array interfaces.
-            if (IsArray())
+            if (IsArray() && !IsMultiDimArray() && IsImplicitInterfaceOfSZArray(pIfcMT))
             {
-                // At this, we know that we're trying to cast an array to an interface and that the normal static lookup failed.
-
-                // FindDispatchImpl assumes that the cast is legal so we should be able to assume now that it is a valid
-                // IList<T> call thru an array.
+                // Only the built-in array interfaces use SZArrayHelper. Other
+                // interfaces can be supplied by extension resolution below.
 
                 // Get the MT of IList<T> or IReadOnlyList<T>
 
@@ -8621,6 +8625,15 @@ MethodTable::TryResolveConstraintMethodApprox(
                     return NULL;
                 }
             }
+        }
+
+        if (cPotentialMatchingInterfaces == 0 &&
+            ExtensionInterface::IsExtensionSensitive(this, thInterfaceType.AsMethodTable()))
+        {
+            // The extension has no canonical byref target (for example an
+            // interface receiver target). Let the JIT box this value and use
+            // ordinary interface dispatch, which resolves the actual witness.
+            return NULL;
         }
 
         _ASSERTE_MSG((cPotentialMatchingInterfaces != 0),

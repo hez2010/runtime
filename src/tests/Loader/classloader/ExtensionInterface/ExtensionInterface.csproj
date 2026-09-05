@@ -11,11 +11,15 @@
     <Compile Include="ExtensionInterface.cs" />
     <Compile Include="OpenWitnessTests.cs" />
     <Compile Include="InferenceWitnessTests.cs" />
+    <Compile Include="ResolutionWitnessTests.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="ExtensionInterfaceForeignTypes.csproj" />
     <ProjectReference Include="ExtensionInterfaceTypes.ilproj" />
     <ProjectReference Include="OpenWitnessTypes.ilproj" />
     <ProjectReference Include="InferenceWitnessTypes.ilproj" />
+    <ProjectReference Include="ResolutionWitnessTypes.ilproj" />
+    <ProjectReference Include="ResolutionBridgeTypes.ilproj" />
+    <ProjectReference Include="InvalidInterfaceTargetTypes.ilproj" />
   </ItemGroup>
 </Project>

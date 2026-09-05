@@ -6,6 +6,7 @@
 
 class MethodTable;
 class MethodDesc;
+class TypeHandle;
 
 namespace ExtensionInterface
 {
@@ -20,6 +21,15 @@ namespace ExtensionInterface
     // Returns the closed witness interface for an extension implementation. Nominal
     // implementations are deliberately not returned by this operation.
     bool TryResolve(MethodTable* pReceiverMT, MethodTable* pInterfaceMT, MethodTable** ppWitnessMT);
+
+    // Constraint validation may prove a constructed open pair in its generic
+    // parameter context. Such proofs never enter the exact runtime pair cache.
+    bool SatisfiesConstraint(MethodTable* pReceiverMT, MethodTable* pInterfaceMT);
+
+    // A proved implementation may discharge a self-reference while validating
+    // its contract type. This is not an assumption for witness applicability.
+    bool IsContractValidationAssumption(
+        MethodTable* pValidatingInterfaceMT, TypeHandle receiver, MethodTable* pConstraintMT);
 
     // Returns the canonical static body associated with an interface member. The
     // body has an explicit receiver argument for instance interface members. The

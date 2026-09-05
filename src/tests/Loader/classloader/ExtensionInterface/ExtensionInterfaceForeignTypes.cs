@@ -36,3 +36,7 @@ public sealed class ForeignNestedClass<T> { }
 public sealed class ForeignGenericMethodClass { }
 public struct ForeignGenericMethodStruct { }
 public sealed class ForeignGenericTypeMethodClass<TContext> { }
+
+public sealed class ForeignChainReceiver { }
+public struct ForeignChainValue { }
+public struct ForeignGenericChainValue<T> { }

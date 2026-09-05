@@ -696,6 +696,7 @@ BEGIN
     IDS_BINDING_EXCEPTION_OPENING_FILE         "Exception opening '%s': %s"
     IDS_BINDING_FAILED_TO_INIT_ASSEMBLY        "Failed to initialize assembly from '%s'. %s"
     IDS_BINDING_CACHED_FAILURE_PREFIX          "[cached failure] %s"
+    IDS_CLASSLOAD_EXTENSION_RESOLUTION_LIMIT   "Extension interface resolution exceeded its complexity limit."
 END
 
 //

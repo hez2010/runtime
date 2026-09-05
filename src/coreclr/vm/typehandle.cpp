@@ -1299,7 +1299,9 @@ BOOL SatisfiesClassConstraints(TypeHandle instanceTypeHnd, TypeHandle typicalTyp
         SigTypeContext::InitTypeContext(instanceTypeHnd, &typeContext);
 
         BOOL bSatisfiesConstraints =
-            formalInst[i].AsGenericVariable()->SatisfiesConstraints(&typeContext, thActualArg, pInstContext);
+            formalInst[i].AsGenericVariable()->SatisfiesConstraints(
+                &typeContext, thActualArg, pInstContext,
+                instanceTypeHnd.IsInterface() ? instanceTypeHnd.AsMethodTable() : nullptr);
 
         if (!bSatisfiesConstraints)
         {
@@ -1388,7 +1390,7 @@ BOOL TypeHandle::SatisfiesClassConstraints() const
         _ASSERTE(tyvar != NULL);
         _ASSERTE(TypeFromToken(tyvar->GetTypeOrMethodDef()) == mdtTypeDef);
 
-        if (!tyvar->SatisfiesConstraints(&typeContext, thArg))
+        if (!tyvar->SatisfiesConstraints(&typeContext, thArg, nullptr, IsInterface() ? AsMethodTable() : nullptr))
         {
             return FALSE;
         }

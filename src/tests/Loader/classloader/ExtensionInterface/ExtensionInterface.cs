@@ -11,8 +11,13 @@ using System.Threading.Tasks;
 
 public static partial class ExtensionInterfaceTests
 {
-    public static int Main()
+    public static int Main(string[] args)
     {
+        if (args.Length != 0)
+        {
+            RunResolutionReviewCase(args[0]);
+            return 100;
+        }
         Console.WriteLine("type-owned");
         CastDispatchAndReflectionUseTheSameWitness();
         Console.WriteLine("interface-owned");
@@ -33,6 +38,11 @@ public static partial class ExtensionInterfaceTests
         CyclesDoNotJustifyThemselvesAndAmbiguityIsStable();
         Console.WriteLine("precedence");
         NominalImplementationsWinAndUnmarkedPairsStayNegative();
+        Console.WriteLine("resolution-rules");
+        RunResolutionReviewCase("interface-targets");
+        RunResolutionReviewCase("deep-owner");
+        RunResolutionReviewCase("self-contracts");
+        RunResolutionReviewCase("resolution-limit");
         Console.WriteLine("optimized-stress");
         OptimizedAndConcurrentPathsRemainCorrect();
         Console.WriteLine("passed");

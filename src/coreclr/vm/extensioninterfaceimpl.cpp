@@ -268,8 +268,7 @@ namespace
         mdTypeDef interfaceType,
         UINT32 rowIndex,
         StackSArray<mdTypeDef>* pVisited,
-        StackSArray<RowReference>* pReferences,
-        UINT32 depth = 0)
+        StackSArray<RowReference>* pReferences)
     {
         CONTRACTL
         {
@@ -285,35 +284,26 @@ namespace
         }
 
         pVisited->Append(interfaceType);
-        pReferences->Append(RowReference{interfaceType, rowIndex});
-        if (depth == 64)
-        {
-            return;
-        }
-
         IMDInternalImport* pImport = pModule->GetMDImport();
-        HENUMInternalHolder hEnum(pImport);
-        hEnum.EnumInit(mdtInterfaceImpl, interfaceType);
-
-        mdInterfaceImpl interfaceImpl;
-        while (pImport->EnumNext(&hEnum, &interfaceImpl))
+        for (COUNT_T next = 0; next < pVisited->GetCount(); next++)
         {
-            mdToken implementedInterface;
-            if (FAILED(pImport->GetTypeOfInterfaceImpl(interfaceImpl, &implementedInterface)))
-            {
-                continue;
-            }
+            mdTypeDef current = (*pVisited)[next];
+            pReferences->Append(RowReference{current, rowIndex});
+            HENUMInternalHolder hEnum(pImport);
+            hEnum.EnumInit(mdtInterfaceImpl, current);
 
-            mdTypeDef implementedInterfaceTypeDef;
-            if (TryGetLocalTypeDefFromSignature(pModule, implementedInterface, &implementedInterfaceTypeDef))
+            mdInterfaceImpl interfaceImpl;
+            while (pImport->EnumNext(&hEnum, &interfaceImpl))
             {
-                AppendInterfaceOwnerReferences(
-                    pModule,
-                    implementedInterfaceTypeDef,
-                    rowIndex,
-                    pVisited,
-                    pReferences,
-                    depth + 1);
+                mdToken implementedInterface;
+                IfFailThrow(pImport->GetTypeOfInterfaceImpl(interfaceImpl, &implementedInterface));
+
+                mdTypeDef implementedInterfaceTypeDef;
+                if (TryGetLocalTypeDefFromSignature(pModule, implementedInterface, &implementedInterfaceTypeDef) &&
+                    !ContainsTypeDef(*pVisited, implementedInterfaceTypeDef))
+                {
+                    pVisited->Append(implementedInterfaceTypeDef);
+                }
             }
         }
     }
@@ -407,6 +397,7 @@ namespace
                 FAILED(pImport->GetTypeDefProps(row.owner, &ownerAttributes, NULL)) ||
                 FAILED(pImport->GetTypeDefProps(row.implementation, &implementationAttributes, NULL)) ||
                 !IsTdInterface(implementationAttributes) ||
+                (row.flags == ExtensionInterfaceImpl_TypeOwned && IsTdInterface(ownerAttributes)) ||
                 (row.flags == ExtensionInterfaceImpl_InterfaceOwned && !IsTdInterface(ownerAttributes)))
             {
                 ThrowInvalidManifest();
@@ -1081,7 +1072,8 @@ namespace
         const SArray<TypeHandle>& targetBindings,
         SArray<TypeHandle>* completeBindings,
         bool includeBaseInterfaces = true,
-        bool approximate = false)
+        bool approximate = false,
+        UINT32 ignoredConstraintParameter = UINT32_MAX)
     {
         CONTRACTL
         {
@@ -1138,7 +1130,7 @@ namespace
 
             for (UINT32 i = 0; i < bindingCount; i++)
             {
-                if (bindings[i].IsNull() || bindings[i].IsTypeDesc())
+                if (i == ignoredConstraintParameter || bindings[i].IsNull() || bindings[i].IsTypeDesc())
                 {
                     continue;
                 }
@@ -1237,7 +1229,8 @@ namespace
         TypeHandle witnessDefinition,
         MethodTable* pWitnessMT,
         const SArray<TypeHandle>& targetBindings,
-        const TypeHandle* selectedBindings)
+        const TypeHandle* selectedBindings,
+        UINT32 ignoredConstraintParameter)
     {
         CONTRACTL
         {
@@ -1273,7 +1266,8 @@ namespace
                 }
 
                 StackSArray<TypeHandle> recovered;
-                InferWitnessBindings(witnessDefinition, pPatternMT, pContractMT, targetBindings, &recovered, false);
+                InferWitnessBindings(witnessDefinition, pPatternMT, pContractMT, targetBindings, &recovered,
+                    false, false, ignoredConstraintParameter);
                 bool found = false;
                 for (COUNT_T offset = 0; offset < recovered.GetCount(); offset += bindingCount)
                 {
@@ -1432,7 +1426,9 @@ namespace
                     FALSE,
                     pInterfaceMD->GetMethodInstantiation(),
                     FALSE,
-                    TRUE /* retain the exact owner even for a non-generic interface method */);
+                    TRUE /* retain the exact owner even for a non-generic interface method */,
+                    TRUE,
+                    CLASS_DEPENDENCIES_LOADED);
             }
         }
         else
@@ -1480,7 +1476,9 @@ namespace
                     FALSE,
                     pInterfaceMD->GetMethodInstantiation(),
                     FALSE,
-                    TRUE);
+                    TRUE,
+                    TRUE,
+                    CLASS_DEPENDENCIES_LOADED);
             }
         }
 
@@ -1493,7 +1491,9 @@ namespace
                 FALSE,
                 pInterfaceMD->GetMethodInstantiation(),
                 FALSE,
-                TRUE);
+                TRUE,
+                TRUE,
+                CLASS_DEPENDENCIES_LOADED);
         }
 
         if (pDeclarationMD->GetMethodTable() != pInterfaceMT ||
@@ -1649,7 +1649,9 @@ namespace
                     ? pBodyDefinition->GetMethodInstantiation()
                     : pInterfaceMD->GetMethodInstantiation(),
                 FALSE,
-                pInterfaceMD->IsGenericMethodDefinition());
+                pInterfaceMD->IsGenericMethodDefinition(),
+                TRUE,
+                CLASS_DEPENDENCIES_LOADED);
             _ASSERTE(pBodyMD->HasSameMethodDefAs(pBodyDefinition));
             if (!ValidateCanonicalBodySignature(target, pWitnessMT, pInterfaceMT, pInterfaceMD, pBodyMD))
             {
@@ -1697,7 +1699,7 @@ namespace
             // interface arguments; ordinary variance guarantees compatible calls.
             MethodDesc* pDeclaredMD = MethodDesc::FindOrCreateAssociatedMethodDesc(
                 pInterfaceMD->StripMethodInstantiation(), pDeclaredMT, FALSE,
-                pInterfaceMD->GetMethodInstantiation(), FALSE, TRUE);
+                pInterfaceMD->GetMethodInstantiation(), FALSE, TRUE, TRUE, CLASS_DEPENDENCIES_LOADED);
             MethodDesc* pBodyMD;
             if (FindCanonicalBodyForInterface(target, pWitnessMT, pDeclaredMT, pDeclaredMD, &pBodyMD))
             {
@@ -1773,6 +1775,123 @@ namespace
         }
     }
 
+    bool ContainsParameter(TypeHandle type, TypeHandle parameter)
+    {
+        LIMITED_METHOD_CONTRACT;
+        if (type == parameter)
+        {
+            return true;
+        }
+        if (type.IsArray())
+        {
+            return ContainsParameter(type.GetArrayElementTypeHandle(), parameter);
+        }
+        if (!type.IsTypeDesc())
+        {
+            Instantiation arguments = type.GetInstantiation();
+            for (UINT32 i = 0; i < arguments.GetNumArgs(); i++)
+            {
+                if (ContainsParameter(arguments[i], parameter))
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    bool HasRequiredVariance(TypeHandle type, TypeHandle parameter, bool covariant)
+    {
+        LIMITED_METHOD_CONTRACT;
+        if (type == parameter)
+        {
+            return covariant;
+        }
+        if (type.IsArray())
+        {
+            return HasRequiredVariance(type.GetArrayElementTypeHandle(), parameter, covariant);
+        }
+        if (!type.IsTypeDesc())
+        {
+            Instantiation arguments = type.GetInstantiation();
+            for (UINT32 i = 0; i < arguments.GetNumArgs(); i++)
+            {
+                CorGenericParamAttr variance = type.AsMethodTable()->GetClass()->GetVarianceOfTypeParameter(i);
+                if (variance == gpNonVariant)
+                {
+                    if (ContainsParameter(arguments[i], parameter))
+                    {
+                        return false;
+                    }
+                }
+                else if (!HasRequiredVariance(arguments[i], parameter,
+                    variance == gpCovariant ? covariant : !covariant))
+                {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    bool CanInheritBareReceiver(
+        MethodTable* pReceiverMT, MethodTable* pWitnessDefinitionMT, TypeHandle receiverParameter)
+    {
+        CONTRACTL { THROWS; GC_TRIGGERS; MODE_ANY; } CONTRACTL_END;
+        if (pReceiverMT->IsValueType() ||
+            (pReceiverMT->IsSealed() && !pReceiverMT->IsArray() && !pReceiverMT->HasVariance()))
+        {
+            return true;
+        }
+        // These reference-type arguments can also contain boxed value types.
+        if (pReceiverMT == g_pObjectClass || pReceiverMT == g_pValueTypeClass || pReceiverMT == g_pEnumClass)
+        {
+            return false;
+        }
+
+        DWORD flags;
+        TypeVarTypeDesc* pParameter = receiverParameter.AsGenericVariable();
+        IfFailThrow(pParameter->GetModule()->GetMDImport()->GetGenericParamProps(
+            pParameter->GetToken(), nullptr, &flags, nullptr, nullptr, nullptr));
+        if ((flags & gpDefaultConstructorConstraint) != 0)
+        {
+            return false;
+        }
+
+        // Rebinding a bare receiver from a base class to a derived class must
+        // preserve both the requested contract and its applicability conditions.
+        MethodTable::InterfaceMapIterator interfaces = pWitnessDefinitionMT->IterateInterfaceMap();
+        while (interfaces.Next())
+        {
+            if (!HasRequiredVariance(TypeHandle(interfaces.GetInterface(pWitnessDefinitionMT)), receiverParameter, true))
+            {
+                return false;
+            }
+        }
+        Instantiation parameters = pWitnessDefinitionMT->GetInstantiation();
+        for (UINT32 i = 0; i < parameters.GetNumArgs(); i++)
+        {
+            DWORD count;
+            TypeHandle* constraints = parameters[i].AsGenericVariable()->GetConstraints(
+                &count, CLASS_DEPENDENCIES_LOADED, WhichConstraintsToLoad::All);
+            for (DWORD j = 0; j < count; j++)
+            {
+                if (!HasRequiredVariance(constraints[j], receiverParameter, false))
+                {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    struct ContractValidationScope
+    {
+        TypeHandle openTarget;
+        MethodTable* interfaceType = nullptr;
+        MethodTable* openInterface = nullptr;
+    };
+
     void ConsiderCandidate(
         const ManifestRow& row,
         Module* pModule,
@@ -1783,7 +1902,9 @@ namespace
         MethodTable** ppSelectedWitnessMT,
         MethodTable** ppSelectedTargetMT,
         bool checkWitnessConstraints,
-        bool detectAmbiguity)
+        bool detectAmbiguity,
+        bool matchKnownTarget = false,
+        ContractValidationScope* pSelectedContract = nullptr)
     {
         CONTRACTL
         {
@@ -1807,7 +1928,9 @@ namespace
             pModule,
             row.implementation,
             ClassLoader::ThrowIfNotFound,
-            ClassLoader::PermitUninstDefOrRef);
+            ClassLoader::PermitUninstDefOrRef,
+            tdNoTypes,
+            CLASS_DEPENDENCIES_LOADED);
         if (witnessDefinition.IsTypeDesc() ||
             !witnessDefinition.IsInterface() ||
             !HasMarker(witnessDefinition.AsMethodTable()))
@@ -1823,9 +1946,15 @@ namespace
             row.targetSignatureSize,
             &targetRoot,
             &rootTypeVariableIndex);
+        // Arrays and variant delegates, like interfaces, can accept values whose
+        // nominal projections do not contain the statically known target type.
+        matchKnownTarget |= row.targetSignature[0] == ELEMENT_TYPE_SZARRAY ||
+            row.targetSignature[0] == ELEMENT_TYPE_ARRAY ||
+            (targetRootKind == SignatureRootKind::Nominal && targetRoot.AsMethodTable()->HasVariance());
         if (expectedFlags == ExtensionInterfaceImpl_TypeOwned)
         {
             if (targetRootKind != SignatureRootKind::Nominal ||
+                targetRoot.IsInterface() ||
                 targetRoot.GetModule() != pModule ||
                 targetRoot.GetCl() != row.owner ||
                 pProjectionMT->GetModule() != pModule ||
@@ -1835,6 +1964,7 @@ namespace
             }
         }
         Instantiation formalWitnessInstantiation = witnessDefinition.GetInstantiation();
+        UINT32 ignoredConstraintParameter = UINT32_MAX;
         if (targetRootKind == SignatureRootKind::TypeVariable)
         {
             if (expectedFlags != ExtensionInterfaceImpl_InterfaceOwned ||
@@ -1844,9 +1974,23 @@ namespace
             }
 
             TypeVarTypeDesc* pRootVariable = formalWitnessInstantiation[rootTypeVariableIndex].AsGenericVariable();
+            pRootVariable->LoadConstraints(
+                CLASS_DEPENDENCIES_LOADED, WhichConstraintsToLoad::TypeOrMethodVarsAndNonInterfacesOnly);
             if (!pRootVariable->ConstrainedAsObjRef() && !pRootVariable->ConstrainedAsValueType())
             {
                 ThrowInvalidManifest();
+            }
+
+            if (checkWitnessConstraints && !CanInheritBareReceiver(
+                    pReceiverMT, witnessDefinition.AsMethodTable(), formalWitnessInstantiation[rootTypeVariableIndex]))
+            {
+                return;
+            }
+            if (pReceiverMT->IsArray() || pReceiverMT->HasVariance())
+            {
+                // Array/delegate variance need not retain the same nominal
+                // projections. Additional arguments must be independently known.
+                ignoredConstraintParameter = rootTypeVariableIndex;
             }
 
             if (!checkWitnessConstraints &&
@@ -1863,7 +2007,7 @@ namespace
             bindings.Append(TypeHandle());
         }
 
-        if (!MatchTarget(
+        if (!matchKnownTarget && !MatchTarget(
                 row,
                 pModule,
                 TypeHandle(pProjectionMT),
@@ -1876,7 +2020,7 @@ namespace
         bool needsInference = !BindingsComplete(bindings);
         SigTypeContext definitionContext(formalWitnessInstantiation, Instantiation());
         TypeHandle openInterface = SigPointer(row.interfaceSignature, row.interfaceSignatureSize)
-            .GetTypeHandleThrowing(pModule, &definitionContext);
+            .GetTypeHandleThrowing(pModule, &definitionContext, ClassLoader::LoadTypes, CLASS_DEPENDENCIES_LOADED);
         if (openInterface.IsTypeDesc() || !openInterface.IsInterface())
         {
             ThrowInvalidManifest();
@@ -1891,6 +2035,26 @@ namespace
             }
 
             Instantiation witnessInstantiation(arguments, bindings.GetCount());
+            SigTypeContext signatureContext(witnessInstantiation, Instantiation());
+            MethodTable* pAppliedTargetMT = pProjectionMT;
+            if (matchKnownTarget)
+            {
+                TypeHandle target = SigPointer(row.targetSignature, row.targetSignatureSize)
+                    .GetTypeHandleThrowing(pModule, &signatureContext, ClassLoader::LoadTypes, CLASS_DEPENDENCIES_LOADED);
+                if (target.IsTypeDesc())
+                {
+                    ThrowInvalidManifest();
+                }
+                pAppliedTargetMT = target.AsMethodTable();
+
+                if (checkWitnessConstraints && !TypeHandle(pReceiverMT).CanCastTo(target))
+                {
+                    if (!target.IsInterface() || !ExtensionInterface::SatisfiesConstraint(pReceiverMT, pAppliedTargetMT))
+                    {
+                        return;
+                    }
+                }
+            }
             if (checkWitnessConstraints && !SatisfiesWitnessConstraints(witnessDefinition, witnessInstantiation))
             {
                 return;
@@ -1902,13 +2066,15 @@ namespace
                 witness = ClassLoader::LoadGenericInstantiationThrowing(
                     pModule,
                     row.implementation,
-                    witnessInstantiation);
+                    witnessInstantiation,
+                    ClassLoader::LoadTypes,
+                    CLASS_DEPENDENCIES_LOADED);
             }
 
-            SigTypeContext signatureContext(witnessInstantiation, Instantiation());
             TypeHandle declaredInterface = SigPointer(
                 row.interfaceSignature,
-                row.interfaceSignatureSize).GetTypeHandleThrowing(pModule, &signatureContext);
+                row.interfaceSignatureSize).GetTypeHandleThrowing(
+                    pModule, &signatureContext, ClassLoader::LoadTypes, CLASS_DEPENDENCIES_LOADED);
             if (declaredInterface.IsTypeDesc() || !declaredInterface.IsInterface())
             {
                 ThrowInvalidManifest();
@@ -1950,7 +2116,7 @@ namespace
             // specialized to (for example) List<int> must not satisfy a List<!0>
             // declaration merely because the first queried pair happens to use int.
             TypeHandle openTarget = SigPointer(row.targetSignature, row.targetSignatureSize)
-                .GetTypeHandleThrowing(pModule, &definitionContext);
+                .GetTypeHandleThrowing(pModule, &definitionContext, ClassLoader::LoadTypes, CLASS_DEPENDENCIES_LOADED);
             ValidateWitnessMethodImplementations(openTarget, witnessDefinition.AsMethodTable(), pOpenInterfaceMT);
             MethodTable::InterfaceMapIterator openInterfaceIterator = pOpenInterfaceMT->IterateInterfaceMap();
             while (openInterfaceIterator.Next())
@@ -1963,13 +2129,18 @@ namespace
 
             if (needsInference && checkWitnessConstraints)
             {
-                ValidateInferredInterfaceClosure(pReceiverMT, witnessDefinition, pWitnessMT, bindings, arguments);
+                ValidateInferredInterfaceClosure(
+                    pReceiverMT, witnessDefinition, pWitnessMT, bindings, arguments, ignoredConstraintParameter);
             }
 
             if (*ppSelectedWitnessMT == nullptr)
             {
                 *ppSelectedWitnessMT = pWitnessMT;
-                *ppSelectedTargetMT = pProjectionMT;
+                *ppSelectedTargetMT = pAppliedTargetMT;
+                if (pSelectedContract != nullptr)
+                {
+                    *pSelectedContract = {openTarget, pDeclaredInterfaceMT, pOpenInterfaceMT};
+                }
             }
             else if (*ppSelectedWitnessMT != pWitnessMT)
             {
@@ -1979,7 +2150,7 @@ namespace
                     *ppSelectedTargetMT = nullptr;
                 }
             }
-            else if (*ppSelectedTargetMT != pProjectionMT)
+            else if (*ppSelectedTargetMT != pAppliedTargetMT)
             {
                 // All rows belonging to one declaration must describe the same closed target.
                 ThrowInvalidManifest();
@@ -1994,7 +2165,8 @@ namespace
         {
             StackSArray<TypeHandle> inferred;
             InferWitnessBindings(
-                witnessDefinition, pOpenInterfaceMT, pRequestedInterfaceMT, bindings, &inferred, true, !checkWitnessConstraints);
+                witnessDefinition, pOpenInterfaceMT, pRequestedInterfaceMT, bindings, &inferred,
+                true, !checkWitnessConstraints, ignoredConstraintParameter);
             for (COUNT_T offset = 0; offset < inferred.GetCount(); offset += bindings.GetCount())
             {
                 considerBinding(inferred.GetElements() + offset);
@@ -2097,9 +2269,18 @@ namespace
         MethodTable* provenWitness;
         MethodTable* provenTarget;
         bool recursive;
+        bool validatingContract;
+        UINT32 depth;
+        ContractValidationScope contractValidation;
     };
 
     thread_local ResolvingPair* t_pResolvingPair;
+    thread_local UINT32 t_resolutionQueries;
+
+    // These are resolution failures, not evidence that an interface is absent.
+    // Bound both stack use and branching work for one outermost resolution.
+    const UINT32 MaxResolutionDepth = 64;
+    const UINT32 MaxResolutionQueries = 4096;
 
     class ResolvingPairHolder
     {
@@ -2107,9 +2288,18 @@ namespace
 
     public:
         ResolvingPairHolder(MethodTable* pReceiverMT, MethodTable* pInterfaceMT)
-            : m_pair{pReceiverMT, pInterfaceMT, t_pResolvingPair, nullptr, nullptr, false}
+            : m_pair{pReceiverMT, pInterfaceMT, t_pResolvingPair, nullptr, nullptr, false, false,
+                     t_pResolvingPair == nullptr ? 1u : t_pResolvingPair->depth + 1, {}}
         {
-            LIMITED_METHOD_CONTRACT;
+            CONTRACTL { THROWS; GC_TRIGGERS; MODE_ANY; } CONTRACTL_END;
+            if (m_pair.previous == nullptr)
+            {
+                t_resolutionQueries = 0;
+            }
+            if (m_pair.depth > MaxResolutionDepth || ++t_resolutionQueries > MaxResolutionQueries)
+            {
+                COMPlusThrow(kTypeLoadException, IDS_CLASSLOAD_EXTENSION_RESOLUTION_LIMIT);
+            }
             t_pResolvingPair = &m_pair;
         }
 
@@ -2137,6 +2327,31 @@ namespace
             LIMITED_METHOD_CONTRACT;
             m_pair.provenWitness = pWitnessMT;
             m_pair.provenTarget = pTargetMT;
+        }
+
+        bool DependsOnProvisionalCoherence() const
+        {
+            LIMITED_METHOD_CONTRACT;
+            if (m_pair.recursive)
+            {
+                for (ResolvingPair* pPair = m_pair.previous; pPair != nullptr; pPair = pPair->previous)
+                {
+                    if (pPair->recursive && !pPair->validatingContract)
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        void BeginContractValidation(
+            MethodTable* pWitnessMT, MethodTable* pTargetMT, const ContractValidationScope& scope)
+        {
+            LIMITED_METHOD_CONTRACT;
+            RecordProvenWitness(pWitnessMT, pTargetMT);
+            m_pair.contractValidation = scope;
+            m_pair.validatingContract = true;
         }
     };
 
@@ -2166,7 +2381,8 @@ namespace
     bool CanCache(MethodTable* pReceiverMT, MethodTable* pInterfaceMT)
     {
         LIMITED_METHOD_CONTRACT;
-        return !TypeHandle(pReceiverMT).IsCollectible() && !TypeHandle(pInterfaceMT).IsCollectible();
+        return !pReceiverMT->ContainsGenericVariables() && !pInterfaceMT->ContainsGenericVariables() &&
+            !TypeHandle(pReceiverMT).IsCollectible() && !TypeHandle(pInterfaceMT).IsCollectible();
     }
 
     bool TryGetCachedResolution(
@@ -2273,6 +2489,38 @@ void ExtensionInterface::Initialize()
     s_resolutionCacheLock.Init(CrstLeafLock, CRST_UNSAFE_ANYMODE);
 }
 
+bool ExtensionInterface::IsContractValidationAssumption(
+    MethodTable* pValidatingInterfaceMT, TypeHandle receiver, MethodTable* pConstraintMT)
+{
+    CONTRACTL { THROWS; GC_TRIGGERS; MODE_ANY; } CONTRACTL_END;
+
+    for (ResolvingPair* pPair = t_pResolvingPair; pPair != nullptr; pPair = pPair->previous)
+    {
+        if (!pPair->validatingContract)
+        {
+            continue;
+        }
+        // Loading a closed witness also validates its generic definition. The
+        // open assumption is confined to that definition's parameter context.
+        MethodTable* pProofMT = nullptr;
+        if (receiver == TypeHandle(pPair->receiver))
+        {
+            pProofMT = pPair->contractValidation.interfaceType;
+        }
+        else if (receiver == pPair->contractValidation.openTarget)
+        {
+            pProofMT = pPair->contractValidation.openInterface;
+        }
+        if (pProofMT != nullptr &&
+            pProofMT->CanCastToInterface(pValidatingInterfaceMT) &&
+            pProofMT->CanCastToInterface(pConstraintMT))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 void ExtensionInterface::SetMethodTableFlags(MethodTable* pMT)
 {
     CONTRACTL
@@ -2286,12 +2534,6 @@ void ExtensionInterface::SetMethodTableFlags(MethodTable* pMT)
     bool hasTypeOwnedExtensionImpls =
         pMT->GetParentMethodTable() != nullptr && pMT->GetParentMethodTable()->HasTypeOwnedExtensionImpls();
     bool hasInterfaceOwnedExtensionImpls = false;
-
-    MethodTable::InterfaceMapIterator interfaceIterator = pMT->IterateInterfaceMap();
-    while (!hasTypeOwnedExtensionImpls && interfaceIterator.Next())
-    {
-        hasTypeOwnedExtensionImpls = interfaceIterator.GetInterfaceApprox()->HasTypeOwnedExtensionImpls();
-    }
 
     Module* pModule = pMT->GetModule();
     if (pModule->HasExtensionInterfaceImplementations())
@@ -2360,7 +2602,8 @@ static void CollectCandidates(
     MethodTable* pInterfaceMT,
     MethodTable** ppSelectedWitnessMT,
     MethodTable** ppSelectedTargetMT,
-    bool exact)
+    bool exact,
+    ContractValidationScope* pSelectedContract = nullptr)
 {
     WRAPPER_NO_CONTRACT;
 
@@ -2399,7 +2642,9 @@ static void CollectCandidates(
                     ppSelectedWitnessMT,
                     ppSelectedTargetMT,
                     exact,
-                    exact);
+                    exact,
+                    false,
+                    pSelectedContract);
             }
         });
     }
@@ -2425,6 +2670,14 @@ static void CollectCandidates(
             // each of its nominal projections.
             if (rootKind == SignatureRootKind::TypeVariable)
             {
+                // An interface is not an exact runtime receiver. In particular,
+                // its inhabitants can include boxed value types, so its own
+                // nominal projections and reference classification cannot prove
+                // a bare receiver parameter's conditions for those inhabitants.
+                if (pReceiverMT->IsInterface())
+                {
+                    return;
+                }
                 ConsiderCandidate(
                     row,
                     pInterfaceModule,
@@ -2435,7 +2688,22 @@ static void CollectCandidates(
                     ppSelectedWitnessMT,
                     ppSelectedTargetMT,
                     exact,
-                    exact);
+                    exact,
+                    false,
+                    pSelectedContract);
+                return;
+            }
+
+            if (rootKind == SignatureRootKind::Nominal && targetRoot.IsInterface())
+            {
+                // Determine the target before testing satisfaction. Inferring an
+                // argument from this receiver's nominal interfaces could accept
+                // an interface type argument whose extension-only inhabitants
+                // cannot reconstruct that argument at dispatch time.
+                ConsiderCandidate(
+                    row, pInterfaceModule, pReceiverMT, pInterfaceMT, pReceiverMT,
+                    ExtensionInterfaceImpl_InterfaceOwned, ppSelectedWitnessMT, ppSelectedTargetMT,
+                    exact, exact, true, pSelectedContract);
                 return;
             }
 
@@ -2451,7 +2719,9 @@ static void CollectCandidates(
                     ppSelectedWitnessMT,
                     ppSelectedTargetMT,
                     exact,
-                    exact);
+                    exact,
+                    false,
+                    pSelectedContract);
             }
         });
     }
@@ -2461,7 +2731,8 @@ static bool TryResolveInternal(
     MethodTable* pReceiverMT,
     MethodTable* pInterfaceMT,
     MethodTable** ppWitnessMT,
-    MethodTable** ppTargetMT)
+    MethodTable** ppTargetMT,
+    bool constraintProof = false)
 {
     CONTRACTL
     {
@@ -2481,7 +2752,7 @@ static bool TryResolveInternal(
 
     if (pReceiverMT->IsNullable() ||
         pReceiverMT->IsByRefLike() ||
-        pReceiverMT->ContainsGenericVariables() || pInterfaceMT->ContainsGenericVariables() ||
+        (!constraintProof && (pReceiverMT->ContainsGenericVariables() || pInterfaceMT->ContainsGenericVariables())) ||
         TypeHandle(pReceiverMT).IsCanonicalSubtype() || TypeHandle(pInterfaceMT).IsCanonicalSubtype() ||
         !ExtensionInterface::IsExtensionSensitive(pReceiverMT, pInterfaceMT) ||
         pReceiverMT->CanCastToInterface(pInterfaceMT))
@@ -2515,7 +2786,8 @@ static bool TryResolveInternal(
 
     MethodTable* pSelectedWitnessMT = nullptr;
     MethodTable* pSelectedTargetMT = nullptr;
-    CollectCandidates(pReceiverMT, pInterfaceMT, &pSelectedWitnessMT, &pSelectedTargetMT, true);
+    ContractValidationScope selectedContract;
+    CollectCandidates(pReceiverMT, pInterfaceMT, &pSelectedWitnessMT, &pSelectedTargetMT, true, &selectedContract);
 
     MethodTable* const ambiguous = reinterpret_cast<MethodTable*>(static_cast<UINT_PTR>(-1));
     if (pSelectedWitnessMT != nullptr && pSelectedWitnessMT != ambiguous && resolvingPair.HasRecursiveDependency())
@@ -2525,7 +2797,7 @@ static bool TryResolveInternal(
         resolvingPair.RecordProvenWitness(pSelectedWitnessMT, pSelectedTargetMT);
         pSelectedWitnessMT = nullptr;
         pSelectedTargetMT = nullptr;
-        CollectCandidates(pReceiverMT, pInterfaceMT, &pSelectedWitnessMT, &pSelectedTargetMT, true);
+        CollectCandidates(pReceiverMT, pInterfaceMT, &pSelectedWitnessMT, &pSelectedTargetMT, true, &selectedContract);
     }
     if (pSelectedWitnessMT == ambiguous)
     {
@@ -2540,6 +2812,15 @@ static bool TryResolveInternal(
             CacheResolution(pReceiverMT, pInterfaceMT, nullptr, nullptr, ResolutionState::NotImplemented);
         }
         return false;
+    }
+
+    // Applicability and coherence have completed. Only now may the contract's
+    // own generic well-formedness use the edge being implemented (for example
+    // C : ISelf<C>). Explicit witness constraints never receive this assumption.
+    if (!resolvingPair.DependsOnProvisionalCoherence())
+    {
+        resolvingPair.BeginContractValidation(pSelectedWitnessMT, pSelectedTargetMT, selectedContract);
+        ClassLoader::EnsureLoaded(TypeHandle(pSelectedWitnessMT));
     }
 
     CacheResolution(
@@ -2591,6 +2872,14 @@ bool ExtensionInterface::TryResolve(
 
     MethodTable* pTargetMT;
     return TryResolveInternal(pReceiverMT, pInterfaceMT, ppWitnessMT, &pTargetMT);
+}
+
+bool ExtensionInterface::SatisfiesConstraint(MethodTable* pReceiverMT, MethodTable* pInterfaceMT)
+{
+    WRAPPER_NO_CONTRACT;
+    MethodTable* pWitnessMT;
+    MethodTable* pTargetMT;
+    return TryResolveInternal(pReceiverMT, pInterfaceMT, &pWitnessMT, &pTargetMT, true);
 }
 
 bool ExtensionInterface::TryResolveCanonicalBody(

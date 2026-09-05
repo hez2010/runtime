@@ -3928,7 +3928,8 @@ private:
                                                              MethodDesc* pGenericMDescInRepMT,
                                                              MethodDesc* pSharedMDescForStub,
                                                              Instantiation methodInst,
-                                                             BOOL getSharedNotStub);
+                                                             BOOL getSharedNotStub,
+                                                             ClassLoadLevel level);
     friend struct ::cdac_data<InstantiatedMethodDesc>;
 };
 

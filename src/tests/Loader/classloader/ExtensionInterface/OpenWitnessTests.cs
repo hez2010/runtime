@@ -42,8 +42,11 @@ public static partial class ExtensionInterfaceTests
 
         // One existing reference-receiver declaration also serves multiple closed types.
         Assert.Equal("interface-owned", ((IInterfaceOwned)(object)"text").GetText());
-        Assert.Equal("interface-owned", ((IInterfaceOwned)new object()).GetText());
-        VerifySameWitnessDefinitions(typeof(string), typeof(object), typeof(IInterfaceOwned), 4);
+        Assert.Equal("interface-owned", ((IInterfaceOwned)(object)new ForeignChainReceiver()).GetText());
+        VerifySameWitnessDefinitions(typeof(string), typeof(ForeignChainReceiver), typeof(IInterfaceOwned), 4);
+        // A bare class parameter cannot establish satisfaction for object,
+        // whose inhabitants also include boxed values that fail that constraint.
+        Assert.False(typeof(IInterfaceOwned).IsAssignableFrom(typeof(object)));
 
         object ints = new List<int> { 1, 2, 3 };
         object strings = new List<string> { "a", "b" };

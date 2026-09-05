@@ -27,6 +27,8 @@ public static partial class ExtensionInterfaceTests
         CanonicalBodiesSupportConstrainedAndStaticCalls();
         Console.WriteLine("open-witness-definitions");
         OpenWitnessDefinitionsAreReused();
+        Console.WriteLine("witness-inference");
+        WitnessArgumentsAreInferred();
         Console.WriteLine("coherence");
         CyclesDoNotJustifyThemselvesAndAmbiguityIsStable();
         Console.WriteLine("precedence");

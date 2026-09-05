@@ -10,10 +10,12 @@
   <ItemGroup>
     <Compile Include="ExtensionInterface.cs" />
     <Compile Include="OpenWitnessTests.cs" />
+    <Compile Include="InferenceWitnessTests.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="ExtensionInterfaceForeignTypes.csproj" />
     <ProjectReference Include="ExtensionInterfaceTypes.ilproj" />
     <ProjectReference Include="OpenWitnessTypes.ilproj" />
+    <ProjectReference Include="InferenceWitnessTypes.ilproj" />
   </ItemGroup>
 </Project>

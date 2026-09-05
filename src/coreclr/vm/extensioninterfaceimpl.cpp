@@ -932,6 +932,385 @@ namespace
         return true;
     }
 
+    bool BindingsComplete(const SArray<TypeHandle>& bindings)
+    {
+        LIMITED_METHOD_CONTRACT;
+
+        for (COUNT_T i = 0; i < bindings.GetCount(); i++)
+        {
+            if (bindings[i].IsNull())
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool SameBindings(const TypeHandle* left, const TypeHandle* right, UINT32 count)
+    {
+        LIMITED_METHOD_CONTRACT;
+
+        for (UINT32 i = 0; i < count; i++)
+        {
+            if (left[i] != right[i])
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Each group of bindingCount elements is an independent substitution. Keeping
+    // partial substitutions as well as complete ones deduplicates inference paths.
+    void AppendBindings(SArray<TypeHandle>* states, const SArray<TypeHandle>& bindings)
+    {
+        WRAPPER_NO_CONTRACT;
+
+        UINT32 bindingCount = bindings.GetCount();
+        _ASSERTE(bindingCount != 0);
+        for (COUNT_T offset = 0; offset < states->GetCount(); offset += bindingCount)
+        {
+            if (SameBindings(states->GetElements() + offset, bindings.GetElements(), bindingCount))
+            {
+                return;
+            }
+        }
+        for (UINT32 i = 0; i < bindingCount; i++)
+        {
+            states->Append(bindings[i]);
+        }
+    }
+
+    bool MatchOpenType(
+        TypeHandle pattern,
+        TypeHandle actual,
+        Instantiation parameters,
+        SArray<TypeHandle>* bindings)
+    {
+        CONTRACTL
+        {
+            THROWS;
+            GC_TRIGGERS;
+            MODE_ANY;
+        }
+        CONTRACTL_END;
+
+        if (pattern.IsGenericVariable())
+        {
+            UINT32 index = pattern.AsGenericVariable()->GetIndex();
+            if (index >= parameters.GetNumArgs() || parameters[index] != pattern)
+            {
+                ThrowInvalidManifest();
+            }
+            if ((*bindings)[index].IsNull())
+            {
+                (*bindings)[index] = actual;
+                return true;
+            }
+            return (*bindings)[index] == actual;
+        }
+
+        if (pattern == actual)
+        {
+            return true;
+        }
+        if (pattern.IsArray() && actual.IsArray())
+        {
+            return pattern.GetSignatureCorElementType() == actual.GetSignatureCorElementType() &&
+                pattern.GetRank() == actual.GetRank() &&
+                MatchOpenType(pattern.GetArrayElementTypeHandle(), actual.GetArrayElementTypeHandle(), parameters, bindings);
+        }
+        if (pattern.IsTypeDesc() || actual.IsTypeDesc() ||
+            !pattern.AsMethodTable()->HasSameTypeDefAs(actual.AsMethodTable()))
+        {
+            return false;
+        }
+
+        Instantiation patternArguments = pattern.GetInstantiation();
+        Instantiation actualArguments = actual.GetInstantiation();
+        if (patternArguments.GetNumArgs() != actualArguments.GetNumArgs())
+        {
+            return false;
+        }
+        for (UINT32 i = 0; i < patternArguments.GetNumArgs(); i++)
+        {
+            if (!MatchOpenType(patternArguments[i], actualArguments[i], parameters, bindings))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    void InferFromInterface(
+        MethodTable* pPatternMT,
+        MethodTable* pRequestedMT,
+        Instantiation parameters,
+        const SArray<TypeHandle>& bindings,
+        SArray<TypeHandle>* states)
+    {
+        WRAPPER_NO_CONTRACT;
+
+        if (!pPatternMT->HasSameTypeDefAs(pRequestedMT))
+        {
+            return;
+        }
+
+        StackSArray<TypeHandle> trial;
+        trial.Set(bindings);
+        Instantiation patternArguments = pPatternMT->GetInstantiation();
+        Instantiation requestedArguments = pRequestedMT->GetInstantiation();
+        for (UINT32 i = 0; i < patternArguments.GetNumArgs(); i++)
+        {
+            // Variant arguments are checked by ordinary conversion after inference.
+            // Equating them here would either invent a witness or reject an existing
+            // receiver-determined variance conversion.
+            if (pPatternMT->GetClass()->GetVarianceOfTypeParameter(i) == gpNonVariant &&
+                !MatchOpenType(patternArguments[i], requestedArguments[i], parameters, &trial))
+            {
+                return;
+            }
+        }
+        AppendBindings(states, trial);
+    }
+
+    void InferWitnessBindings(
+        TypeHandle witnessDefinition,
+        MethodTable* pOpenInterfaceMT,
+        MethodTable* pRequestedMT,
+        const SArray<TypeHandle>& targetBindings,
+        SArray<TypeHandle>* completeBindings,
+        bool includeBaseInterfaces = true,
+        bool approximate = false)
+    {
+        CONTRACTL
+        {
+            THROWS;
+            GC_TRIGGERS;
+            MODE_ANY;
+        }
+        CONTRACTL_END;
+
+        UINT32 bindingCount = targetBindings.GetCount();
+        _ASSERTE(bindingCount != 0);
+        if (BindingsComplete(targetBindings))
+        {
+            completeBindings->Set(targetBindings);
+            return;
+        }
+
+        Instantiation parameters = witnessDefinition.GetInstantiation();
+        StackSArray<TypeHandle> states;
+        states.Set(targetBindings);
+        StackSArray<TypeHandle> bindings;
+        StackSArray<TypeHandle> trial;
+        COUNT_T mostCompleteOffset = 0;
+        UINT32 mostBound = 0;
+        for (COUNT_T offset = 0; offset < states.GetCount(); offset += bindingCount)
+        {
+            bindings.SetCount(bindingCount);
+            UINT32 bound = 0;
+            for (UINT32 i = 0; i < bindingCount; i++)
+            {
+                bindings[i] = states[offset + i];
+                bound += !bindings[i].IsNull();
+            }
+            if (bound > mostBound)
+            {
+                mostCompleteOffset = offset;
+                mostBound = bound;
+            }
+            if (bound == bindingCount)
+            {
+                AppendBindings(completeBindings, bindings);
+                continue;
+            }
+
+            InferFromInterface(pOpenInterfaceMT, pRequestedMT, parameters, bindings, &states);
+            if (includeBaseInterfaces)
+            {
+                MethodTable::InterfaceMapIterator interfaces = pOpenInterfaceMT->IterateInterfaceMap();
+                while (interfaces.Next())
+                {
+                    InferFromInterface(interfaces.GetInterface(pOpenInterfaceMT), pRequestedMT, parameters, bindings, &states);
+                }
+            }
+
+            for (UINT32 i = 0; i < bindingCount; i++)
+            {
+                if (bindings[i].IsNull() || bindings[i].IsTypeDesc())
+                {
+                    continue;
+                }
+
+                DWORD constraintCount;
+                TypeHandle* constraints = parameters[i].AsGenericVariable()->GetConstraints(
+                    &constraintCount, CLASS_DEPENDENCIES_LOADED, WhichConstraintsToLoad::All);
+                for (DWORD c = 0; c < constraintCount; c++)
+                {
+                    TypeHandle pattern = constraints[c];
+                    if (pattern.IsTypeDesc() || !pattern.ContainsGenericVariables())
+                    {
+                        continue;
+                    }
+
+                    auto infer = [&](MethodTable* pProjectionMT)
+                    {
+                        trial.Set(bindings);
+                        if (MatchOpenType(pattern, TypeHandle(pProjectionMT), parameters, &trial))
+                        {
+                            AppendBindings(&states, trial);
+                        }
+                    };
+                    MethodTable* pActualMT = bindings[i].AsMethodTable();
+                    for (MethodTable* pCurrentMT = pActualMT; pCurrentMT != nullptr; pCurrentMT = pCurrentMT->GetParentMethodTable())
+                    {
+                        infer(pCurrentMT);
+                    }
+                    MethodTable::InterfaceMapIterator interfaces = pActualMT->IterateInterfaceMap();
+                    while (interfaces.Next())
+                    {
+                        infer(interfaces.GetInterface(pActualMT));
+                    }
+                }
+            }
+        }
+
+        if (approximate && completeBindings->IsEmpty())
+        {
+            // Shared code can hide the nominal projection that supplies a witness
+            // argument. This descriptor is only an ABI representative: the caller
+            // must use the exact constrained-method dictionary lookup for execution.
+            bindings.SetCount(bindingCount);
+            for (UINT32 i = 0; i < bindingCount; i++)
+            {
+                TypeHandle binding = states[mostCompleteOffset + i];
+                bindings[i] = binding.IsNull() ? TypeHandle(g_pCanonMethodTableClass) : binding;
+            }
+            AppendBindings(completeBindings, bindings);
+        }
+    }
+
+    bool MayShareInterfaceView(MethodTable* pFirstMT, MethodTable* pSecondMT)
+    {
+        WRAPPER_NO_CONTRACT;
+
+        if (!pFirstMT->HasSameTypeDefAs(pSecondMT))
+        {
+            return false;
+        }
+        Instantiation first = pFirstMT->GetInstantiation();
+        Instantiation second = pSecondMT->GetInstantiation();
+        for (UINT32 i = 0; i < first.GetNumArgs(); i++)
+        {
+            if (first[i] == second[i])
+            {
+                continue;
+            }
+            CorGenericParamAttr variance = pFirstMT->GetClass()->GetVarianceOfTypeParameter(i);
+            if (variance == gpNonVariant || first[i].IsValueType() || second[i].IsValueType())
+            {
+                return false;
+            }
+            if (variance == gpContravariant && !first[i].IsTypeDesc() && !second[i].IsTypeDesc())
+            {
+                MethodTable* pFirstArgMT = first[i].AsMethodTable();
+                MethodTable* pSecondArgMT = second[i].AsMethodTable();
+                bool firstClass = !pFirstArgMT->IsInterface() && !pFirstArgMT->IsArray() && !pFirstArgMT->HasVariance();
+                bool secondClass = !pSecondArgMT->IsInterface() && !pSecondArgMT->IsArray() && !pSecondArgMT->HasVariance();
+                if (firstClass && secondClass && !first[i].CanCastTo(second[i]) && !second[i].CanCastTo(first[i]))
+                {
+                    return false;
+                }
+                if ((firstClass && pFirstArgMT->IsSealed() && !first[i].CanCastTo(second[i])) ||
+                    (secondClass && pSecondArgMT->IsSealed() && !second[i].CanCastTo(first[i])))
+                {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    void ValidateInferredInterfaceClosure(
+        MethodTable* pReceiverMT,
+        TypeHandle witnessDefinition,
+        MethodTable* pWitnessMT,
+        const SArray<TypeHandle>& targetBindings,
+        const TypeHandle* selectedBindings)
+    {
+        CONTRACTL
+        {
+            THROWS;
+            GC_TRIGGERS;
+            MODE_ANY;
+        }
+        CONTRACTL_END;
+
+        UINT32 bindingCount = targetBindings.GetCount();
+        Instantiation parameters = witnessDefinition.GetInstantiation();
+        MethodTable* pDefinitionMT = witnessDefinition.AsMethodTable();
+        MethodTable::InterfaceMapIterator patterns = pDefinitionMT->IterateInterfaceMap();
+        while (patterns.Next())
+        {
+            MethodTable* pPatternMT = patterns.GetInterface(pDefinitionMT);
+            MethodTable::InterfaceMapIterator interfaces = pWitnessMT->IterateInterfaceMap();
+            while (interfaces.Next())
+            {
+                MethodTable* pContractMT = interfaces.GetInterface(pWitnessMT);
+                StackSArray<TypeHandle> trial;
+                for (UINT32 i = 0; i < bindingCount; i++)
+                {
+                    trial.Append(selectedBindings[i]);
+                }
+                if (!MatchOpenType(TypeHandle(pPatternMT), TypeHandle(pContractMT), parameters, &trial))
+                {
+                    continue;
+                }
+                if (pReceiverMT->CanCastToInterface(pContractMT))
+                {
+                    break;
+                }
+
+                StackSArray<TypeHandle> recovered;
+                InferWitnessBindings(witnessDefinition, pPatternMT, pContractMT, targetBindings, &recovered, false);
+                bool found = false;
+                for (COUNT_T offset = 0; offset < recovered.GetCount(); offset += bindingCount)
+                {
+                    TypeHandle* arguments = recovered.GetElements() + offset;
+                    if (!SatisfiesWitnessConstraints(witnessDefinition, Instantiation(arguments, bindingCount)))
+                    {
+                        continue;
+                    }
+                    if (!SameBindings(arguments, selectedBindings, bindingCount))
+                    {
+                        MethodTable* pOtherWitnessMT = ClassLoader::LoadGenericInstantiationThrowing(
+                            witnessDefinition.GetModule(), witnessDefinition.GetCl(), Instantiation(arguments, bindingCount)).AsMethodTable();
+                        MethodTable::InterfaceMapIterator otherInterfaces = pOtherWitnessMT->IterateInterfaceMap();
+                        while (otherInterfaces.Next())
+                        {
+                            if (MayShareInterfaceView(pContractMT, otherInterfaces.GetInterface(pOtherWitnessMT)))
+                            {
+                                // An exact request cannot select a witness if a
+                                // later variance conversion can expose a competitor.
+                                ThrowInvalidManifest();
+                            }
+                        }
+                        continue;
+                    }
+                    found = true;
+                }
+                if (!found)
+                {
+                    // In particular, a base or variant interface must not erase
+                    // an argument that was available only from the original query.
+                    ThrowInvalidManifest();
+                }
+                break;
+            }
+        }
+    }
+
     bool HasMarker(MethodTable* pWitnessMT)
     {
         CONTRACTL
@@ -1052,12 +1431,28 @@ namespace
                     pInterfaceMT,
                     FALSE,
                     pInterfaceMD->GetMethodInstantiation(),
-                    FALSE);
+                    FALSE,
+                    TRUE /* retain the exact owner even for a non-generic interface method */);
             }
         }
         else
         {
             SigTypeContext signatureContext(pWitnessMT);
+            mdToken parent;
+            IfFailThrow(pModule->GetMDImport()->GetParentOfMemberRef(row.declaration, &parent));
+            if (TypeFromToken(parent) != mdtTypeDef && TypeFromToken(parent) != mdtTypeRef && TypeFromToken(parent) != mdtTypeSpec)
+            {
+                ThrowInvalidManifest();
+            }
+            TypeHandle declarationOwner = ClassLoader::LoadTypeDefOrRefOrSpecThrowing(
+                pModule, parent, &signatureContext,
+                ClassLoader::ThrowIfNotFound, ClassLoader::PermitUninstDefOrRef,
+                ClassLoader::LoadTypes, CLASS_LOAD_EXACTPARENTS);
+            if (declarationOwner != TypeHandle(pInterfaceMT))
+            {
+                return nullptr;
+            }
+
             pDeclarationMD = MemberLoader::GetMethodDescFromMemberDefOrRefOrSpec(
                 pModule,
                 row.declaration,
@@ -1081,10 +1476,11 @@ namespace
             {
                 pDeclarationMD = MethodDesc::FindOrCreateAssociatedMethodDesc(
                     pDeclarationMD->StripMethodInstantiation(),
-                    pDeclarationMD->GetMethodTable(),
+                    pInterfaceMT,
                     FALSE,
                     pInterfaceMD->GetMethodInstantiation(),
-                    FALSE);
+                    FALSE,
+                    TRUE);
             }
         }
 
@@ -1193,7 +1589,7 @@ namespace
         return true;
     }
 
-    bool FindCanonicalBody(
+    bool FindCanonicalBodyForInterface(
         TypeHandle target,
         MethodTable* pWitnessMT,
         MethodTable* pInterfaceMT,
@@ -1271,6 +1667,50 @@ namespace
         return *ppBodyMD != nullptr;
     }
 
+    bool FindCanonicalBody(
+        TypeHandle target,
+        MethodTable* pWitnessMT,
+        MethodTable* pInterfaceMT,
+        MethodDesc* pInterfaceMD,
+        MethodDesc** ppBodyMD)
+    {
+        WRAPPER_NO_CONTRACT;
+
+        if (pWitnessMT->ImplementsInterface(pInterfaceMT))
+        {
+            return FindCanonicalBodyForInterface(target, pWitnessMT, pInterfaceMT, pInterfaceMD, ppBodyMD);
+        }
+
+        GCX_PREEMP();
+        *ppBodyMD = nullptr;
+        MethodTable::InterfaceMapIterator interfaces = pWitnessMT->IterateInterfaceMap();
+        while (interfaces.Next())
+        {
+            MethodTable* pDeclaredMT = interfaces.GetInterface(pWitnessMT);
+            if (!pDeclaredMT->HasSameTypeDefAs(pInterfaceMT) || !pDeclaredMT->CanCastToInterface(pInterfaceMT))
+            {
+                continue;
+            }
+
+            // A variance conversion changes the requested view, not the witness
+            // declaration. Validate and instantiate the body with its declared
+            // interface arguments; ordinary variance guarantees compatible calls.
+            MethodDesc* pDeclaredMD = MethodDesc::FindOrCreateAssociatedMethodDesc(
+                pInterfaceMD->StripMethodInstantiation(), pDeclaredMT, FALSE,
+                pInterfaceMD->GetMethodInstantiation(), FALSE, TRUE);
+            MethodDesc* pBodyMD;
+            if (FindCanonicalBodyForInterface(target, pWitnessMT, pDeclaredMT, pDeclaredMD, &pBodyMD))
+            {
+                if (*ppBodyMD != nullptr && *ppBodyMD != pBodyMD)
+                {
+                    ThrowInvalidManifest();
+                }
+                *ppBodyMD = pBodyMD;
+            }
+        }
+        return *ppBodyMD != nullptr;
+    }
+
     void ValidateWitnessMethodImplementations(
         TypeHandle target,
         MethodTable* pWitnessMT,
@@ -1336,6 +1776,7 @@ namespace
     void ConsiderCandidate(
         const ManifestRow& row,
         Module* pModule,
+        MethodTable* pReceiverMT,
         MethodTable* pRequestedInterfaceMT,
         MethodTable* pProjectionMT,
         UINT16 expectedFlags,
@@ -1432,106 +1873,132 @@ namespace
             return;
         }
 
-        for (COUNT_T i = 0; i < bindings.GetCount(); i++)
+        bool needsInference = !BindingsComplete(bindings);
+        SigTypeContext definitionContext(formalWitnessInstantiation, Instantiation());
+        TypeHandle openInterface = SigPointer(row.interfaceSignature, row.interfaceSignatureSize)
+            .GetTypeHandleThrowing(pModule, &definitionContext);
+        if (openInterface.IsTypeDesc() || !openInterface.IsInterface())
         {
-            if (bindings[i].IsNull())
+            ThrowInvalidManifest();
+        }
+        MethodTable* pOpenInterfaceMT = openInterface.AsMethodTable();
+
+        auto considerBinding = [&](TypeHandle* arguments)
+        {
+            if (!detectAmbiguity && *ppSelectedWitnessMT != nullptr)
+            {
+                return;
+            }
+
+            Instantiation witnessInstantiation(arguments, bindings.GetCount());
+            if (checkWitnessConstraints && !SatisfiesWitnessConstraints(witnessDefinition, witnessInstantiation))
+            {
+                return;
+            }
+
+            TypeHandle witness = witnessDefinition;
+            if (!witnessInstantiation.IsEmpty())
+            {
+                witness = ClassLoader::LoadGenericInstantiationThrowing(
+                    pModule,
+                    row.implementation,
+                    witnessInstantiation);
+            }
+
+            SigTypeContext signatureContext(witnessInstantiation, Instantiation());
+            TypeHandle declaredInterface = SigPointer(
+                row.interfaceSignature,
+                row.interfaceSignatureSize).GetTypeHandleThrowing(pModule, &signatureContext);
+            if (declaredInterface.IsTypeDesc() || !declaredInterface.IsInterface())
             {
                 ThrowInvalidManifest();
             }
-        }
 
-        Instantiation witnessInstantiation(bindings.GetElements(), bindings.GetCount());
-        if (checkWitnessConstraints && !SatisfiesWitnessConstraints(witnessDefinition, witnessInstantiation))
-        {
-            return;
-        }
-
-        TypeHandle witness = witnessDefinition;
-        if (!witnessInstantiation.IsEmpty())
-        {
-            witness = ClassLoader::LoadGenericInstantiationThrowing(
+            TypeHandle interfaceRoot;
+            SignatureRootKind interfaceRootKind = GetSignatureRoot(
                 pModule,
-                row.implementation,
-                witnessInstantiation);
-        }
-
-        SigTypeContext signatureContext(witnessInstantiation, Instantiation());
-        TypeHandle declaredInterface = SigPointer(
-            row.interfaceSignature,
-            row.interfaceSignatureSize).GetTypeHandleThrowing(pModule, &signatureContext);
-        if (declaredInterface.IsTypeDesc() || !declaredInterface.IsInterface())
-        {
-            ThrowInvalidManifest();
-        }
-
-        TypeHandle interfaceRoot;
-        SignatureRootKind interfaceRootKind = GetSignatureRoot(
-            pModule,
-            row.interfaceSignature,
-            row.interfaceSignatureSize,
-            &interfaceRoot);
-        if (interfaceRootKind != SignatureRootKind::Nominal ||
-            (expectedFlags == ExtensionInterfaceImpl_InterfaceOwned &&
-             (interfaceRoot.GetModule() != pModule || interfaceRoot.GetCl() != row.owner)))
-        {
-            ThrowInvalidManifest();
-        }
-
-        MethodTable* pWitnessMT = witness.AsMethodTable();
-        MethodTable* pDeclaredInterfaceMT = declaredInterface.AsMethodTable();
-        if (!pWitnessMT->CanCastToInterface(pDeclaredInterfaceMT))
-        {
-            ThrowInvalidManifest();
-        }
-
-        if (expectedFlags == ExtensionInterfaceImpl_InterfaceOwned &&
-            !ValidateInterfaceOwnedBaseClosure(pDeclaredInterfaceMT))
-        {
-            ThrowInvalidManifest();
-        }
-
-        if (pDeclaredInterfaceMT != pRequestedInterfaceMT &&
-            !pDeclaredInterfaceMT->CanCastToInterface(pRequestedInterfaceMT))
-        {
-            return;
-        }
-
-        // Validate against the declaration's open signatures. A body
-        // specialized to (for example) List<int> must not satisfy a List<!0>
-        // declaration merely because the first queried pair happens to use int.
-        SigTypeContext definitionContext(formalWitnessInstantiation, Instantiation());
-        TypeHandle openTarget = SigPointer(row.targetSignature, row.targetSignatureSize)
-            .GetTypeHandleThrowing(pModule, &definitionContext);
-        TypeHandle openInterface = SigPointer(row.interfaceSignature, row.interfaceSignatureSize)
-            .GetTypeHandleThrowing(pModule, &definitionContext);
-        MethodTable* pOpenInterfaceMT = openInterface.AsMethodTable();
-        ValidateWitnessMethodImplementations(openTarget, witnessDefinition.AsMethodTable(), pOpenInterfaceMT);
-        MethodTable::InterfaceMapIterator openInterfaceIterator = pOpenInterfaceMT->IterateInterfaceMap();
-        while (openInterfaceIterator.Next())
-        {
-            ValidateWitnessMethodImplementations(
-                openTarget,
-                witnessDefinition.AsMethodTable(),
-                openInterfaceIterator.GetInterface(pOpenInterfaceMT));
-        }
-
-        if (*ppSelectedWitnessMT == nullptr)
-        {
-            *ppSelectedWitnessMT = pWitnessMT;
-            *ppSelectedTargetMT = pProjectionMT;
-        }
-        else if (*ppSelectedWitnessMT != pWitnessMT)
-        {
-            if (detectAmbiguity)
+                row.interfaceSignature,
+                row.interfaceSignatureSize,
+                &interfaceRoot);
+            if (interfaceRootKind != SignatureRootKind::Nominal ||
+                (expectedFlags == ExtensionInterfaceImpl_InterfaceOwned &&
+                 (interfaceRoot.GetModule() != pModule || interfaceRoot.GetCl() != row.owner)))
             {
-                *ppSelectedWitnessMT = reinterpret_cast<MethodTable*>(static_cast<UINT_PTR>(-1));
-                *ppSelectedTargetMT = nullptr;
+                ThrowInvalidManifest();
             }
-        }
-        else if (*ppSelectedTargetMT != pProjectionMT)
+
+            MethodTable* pWitnessMT = witness.AsMethodTable();
+            MethodTable* pDeclaredInterfaceMT = declaredInterface.AsMethodTable();
+            if (!pWitnessMT->CanCastToInterface(pDeclaredInterfaceMT))
+            {
+                ThrowInvalidManifest();
+            }
+
+            if (expectedFlags == ExtensionInterfaceImpl_InterfaceOwned &&
+                !ValidateInterfaceOwnedBaseClosure(pDeclaredInterfaceMT))
+            {
+                ThrowInvalidManifest();
+            }
+
+            if (pDeclaredInterfaceMT != pRequestedInterfaceMT &&
+                !pDeclaredInterfaceMT->CanCastToInterface(pRequestedInterfaceMT))
+            {
+                return;
+            }
+
+            // Validate against the declaration's open signatures. A body
+            // specialized to (for example) List<int> must not satisfy a List<!0>
+            // declaration merely because the first queried pair happens to use int.
+            TypeHandle openTarget = SigPointer(row.targetSignature, row.targetSignatureSize)
+                .GetTypeHandleThrowing(pModule, &definitionContext);
+            ValidateWitnessMethodImplementations(openTarget, witnessDefinition.AsMethodTable(), pOpenInterfaceMT);
+            MethodTable::InterfaceMapIterator openInterfaceIterator = pOpenInterfaceMT->IterateInterfaceMap();
+            while (openInterfaceIterator.Next())
+            {
+                ValidateWitnessMethodImplementations(
+                    openTarget,
+                    witnessDefinition.AsMethodTable(),
+                    openInterfaceIterator.GetInterface(pOpenInterfaceMT));
+            }
+
+            if (needsInference && checkWitnessConstraints)
+            {
+                ValidateInferredInterfaceClosure(pReceiverMT, witnessDefinition, pWitnessMT, bindings, arguments);
+            }
+
+            if (*ppSelectedWitnessMT == nullptr)
+            {
+                *ppSelectedWitnessMT = pWitnessMT;
+                *ppSelectedTargetMT = pProjectionMT;
+            }
+            else if (*ppSelectedWitnessMT != pWitnessMT)
+            {
+                if (detectAmbiguity)
+                {
+                    *ppSelectedWitnessMT = reinterpret_cast<MethodTable*>(static_cast<UINT_PTR>(-1));
+                    *ppSelectedTargetMT = nullptr;
+                }
+            }
+            else if (*ppSelectedTargetMT != pProjectionMT)
+            {
+                // All rows belonging to one declaration must describe the same closed target.
+                ThrowInvalidManifest();
+            }
+        };
+
+        if (!needsInference)
         {
-            // All rows belonging to one declaration must describe the same closed target.
-            ThrowInvalidManifest();
+            considerBinding(bindings.GetElements());
+        }
+        else
+        {
+            StackSArray<TypeHandle> inferred;
+            InferWitnessBindings(
+                witnessDefinition, pOpenInterfaceMT, pRequestedInterfaceMT, bindings, &inferred, true, !checkWitnessConstraints);
+            for (COUNT_T offset = 0; offset < inferred.GetCount(); offset += bindings.GetCount())
+            {
+                considerBinding(inferred.GetElements() + offset);
+            }
         }
     }
 
@@ -1627,6 +2094,9 @@ namespace
         MethodTable* receiver;
         MethodTable* interfaceType;
         ResolvingPair* previous;
+        MethodTable* provenWitness;
+        MethodTable* provenTarget;
+        bool recursive;
     };
 
     thread_local ResolvingPair* t_pResolvingPair;
@@ -1637,7 +2107,7 @@ namespace
 
     public:
         ResolvingPairHolder(MethodTable* pReceiverMT, MethodTable* pInterfaceMT)
-            : m_pair{pReceiverMT, pInterfaceMT, t_pResolvingPair}
+            : m_pair{pReceiverMT, pInterfaceMT, t_pResolvingPair, nullptr, nullptr, false}
         {
             LIMITED_METHOD_CONTRACT;
             t_pResolvingPair = &m_pair;
@@ -1655,9 +2125,22 @@ namespace
             LIMITED_METHOD_CONTRACT;
             return m_pair.previous == nullptr;
         }
+
+        bool HasRecursiveDependency() const
+        {
+            LIMITED_METHOD_CONTRACT;
+            return m_pair.recursive;
+        }
+
+        void RecordProvenWitness(MethodTable* pWitnessMT, MethodTable* pTargetMT)
+        {
+            LIMITED_METHOD_CONTRACT;
+            m_pair.provenWitness = pWitnessMT;
+            m_pair.provenTarget = pTargetMT;
+        }
     };
 
-    bool IsResolving(MethodTable* pReceiverMT, MethodTable* pInterfaceMT)
+    ResolvingPair* FindResolvingPair(MethodTable* pReceiverMT, MethodTable* pInterfaceMT)
     {
         LIMITED_METHOD_CONTRACT;
 
@@ -1665,11 +2148,19 @@ namespace
         {
             if (pPair->receiver == pReceiverMT && pPair->interfaceType == pInterfaceMT)
             {
-                return true;
+                for (ResolvingPair* pDependent = t_pResolvingPair; ; pDependent = pDependent->previous)
+                {
+                    pDependent->recursive = true;
+                    if (pDependent == pPair)
+                    {
+                        break;
+                    }
+                }
+                return pPair;
             }
         }
 
-        return false;
+        return nullptr;
     }
 
     bool CanCache(MethodTable* pReceiverMT, MethodTable* pInterfaceMT)
@@ -1726,6 +2217,13 @@ namespace
             MODE_ANY;
         }
         CONTRACTL_END;
+
+        // A nested result that depends on an active recursive query is provisional
+        // until the outer query finishes its coherence check.
+        if (t_pResolvingPair != nullptr && t_pResolvingPair->recursive && t_pResolvingPair->previous != nullptr)
+        {
+            return;
+        }
 
         if (!CanCache(pReceiverMT, pInterfaceMT) ||
             (pWitnessMT != nullptr && TypeHandle(pWitnessMT).IsCollectible()) ||
@@ -1857,55 +2355,14 @@ bool ExtensionInterface::IsWitnessForReceiver(MethodTable* pReceiverMT, MethodTa
     return false;
 }
 
-static bool TryResolveInternal(
+static void CollectCandidates(
     MethodTable* pReceiverMT,
     MethodTable* pInterfaceMT,
-    MethodTable** ppWitnessMT,
-    MethodTable** ppTargetMT)
+    MethodTable** ppSelectedWitnessMT,
+    MethodTable** ppSelectedTargetMT,
+    bool exact)
 {
-    CONTRACTL
-    {
-        THROWS;
-        GC_TRIGGERS;
-        MODE_ANY;
-        PRECONDITION(CheckPointer(pReceiverMT));
-        PRECONDITION(CheckPointer(pInterfaceMT));
-        PRECONDITION(pInterfaceMT->IsInterface());
-        PRECONDITION(CheckPointer(ppWitnessMT));
-        PRECONDITION(CheckPointer(ppTargetMT));
-    }
-    CONTRACTL_END;
-
-    *ppWitnessMT = nullptr;
-    *ppTargetMT = nullptr;
-
-    if (pReceiverMT->IsNullable() ||
-        pReceiverMT->IsByRefLike() ||
-        !ExtensionInterface::IsExtensionSensitive(pReceiverMT, pInterfaceMT) ||
-        pReceiverMT->CanCastToInterface(pInterfaceMT))
-    {
-        return false;
-    }
-
-    ResolutionEntry cachedEntry;
-    if (TryGetCachedResolution(pReceiverMT, pInterfaceMT, &cachedEntry))
-    {
-        if (cachedEntry.state == ResolutionState::Ambiguous)
-        {
-            ThrowInvalidManifest();
-        }
-
-        *ppWitnessMT = cachedEntry.witness;
-        *ppTargetMT = cachedEntry.target;
-        return cachedEntry.state == ResolutionState::Resolved;
-    }
-
-    if (IsResolving(pReceiverMT, pInterfaceMT))
-    {
-        return false;
-    }
-
-    ResolvingPairHolder resolvingPair(pReceiverMT, pInterfaceMT);
+    WRAPPER_NO_CONTRACT;
 
     StackSArray<MethodTable*> projections;
     for (MethodTable* pCurrentMT = pReceiverMT; pCurrentMT != nullptr; pCurrentMT = pCurrentMT->GetParentMethodTable())
@@ -1919,8 +2376,6 @@ static bool TryResolveInternal(
         AppendProjection(&projections, interfaceIterator.GetInterface(pReceiverMT));
     }
 
-    MethodTable* pSelectedWitnessMT = nullptr;
-    MethodTable* pSelectedTargetMT = nullptr;
     for (COUNT_T i = 0; i < projections.GetCount(); i++)
     {
         MethodTable* pProjectionMT = projections[i];
@@ -1937,13 +2392,14 @@ static bool TryResolveInternal(
                 ConsiderCandidate(
                     row,
                     pProjectionModule,
+                    pReceiverMT,
                     pInterfaceMT,
                     pProjectionMT,
                     ExtensionInterfaceImpl_TypeOwned,
-                    &pSelectedWitnessMT,
-                    &pSelectedTargetMT,
-                    true,
-                    true);
+                    ppSelectedWitnessMT,
+                    ppSelectedTargetMT,
+                    exact,
+                    exact);
             }
         });
     }
@@ -1972,13 +2428,14 @@ static bool TryResolveInternal(
                 ConsiderCandidate(
                     row,
                     pInterfaceModule,
+                    pReceiverMT,
                     pInterfaceMT,
                     pReceiverMT,
                     ExtensionInterfaceImpl_InterfaceOwned,
-                    &pSelectedWitnessMT,
-                    &pSelectedTargetMT,
-                    true,
-                    true);
+                    ppSelectedWitnessMT,
+                    ppSelectedTargetMT,
+                    exact,
+                    exact);
                 return;
             }
 
@@ -1987,18 +2444,89 @@ static bool TryResolveInternal(
                 ConsiderCandidate(
                     row,
                     pInterfaceModule,
+                    pReceiverMT,
                     pInterfaceMT,
                     projections[i],
                     ExtensionInterfaceImpl_InterfaceOwned,
-                    &pSelectedWitnessMT,
-                    &pSelectedTargetMT,
-                    true,
-                    true);
+                    ppSelectedWitnessMT,
+                    ppSelectedTargetMT,
+                    exact,
+                    exact);
             }
         });
     }
+}
+
+static bool TryResolveInternal(
+    MethodTable* pReceiverMT,
+    MethodTable* pInterfaceMT,
+    MethodTable** ppWitnessMT,
+    MethodTable** ppTargetMT)
+{
+    CONTRACTL
+    {
+        THROWS;
+        GC_TRIGGERS;
+        MODE_ANY;
+        PRECONDITION(CheckPointer(pReceiverMT));
+        PRECONDITION(CheckPointer(pInterfaceMT));
+        PRECONDITION(pInterfaceMT->IsInterface());
+        PRECONDITION(CheckPointer(ppWitnessMT));
+        PRECONDITION(CheckPointer(ppTargetMT));
+    }
+    CONTRACTL_END;
+
+    *ppWitnessMT = nullptr;
+    *ppTargetMT = nullptr;
+
+    if (pReceiverMT->IsNullable() ||
+        pReceiverMT->IsByRefLike() ||
+        pReceiverMT->ContainsGenericVariables() || pInterfaceMT->ContainsGenericVariables() ||
+        TypeHandle(pReceiverMT).IsCanonicalSubtype() || TypeHandle(pInterfaceMT).IsCanonicalSubtype() ||
+        !ExtensionInterface::IsExtensionSensitive(pReceiverMT, pInterfaceMT) ||
+        pReceiverMT->CanCastToInterface(pInterfaceMT))
+    {
+        return false;
+    }
+
+    ResolutionEntry cachedEntry;
+    if (TryGetCachedResolution(pReceiverMT, pInterfaceMT, &cachedEntry))
+    {
+        if (cachedEntry.state == ResolutionState::Ambiguous)
+        {
+            ThrowInvalidManifest();
+        }
+
+        *ppWitnessMT = cachedEntry.witness;
+        *ppTargetMT = cachedEntry.target;
+        return cachedEntry.state == ResolutionState::Resolved;
+    }
+
+    if (ResolvingPair* pActive = FindResolvingPair(pReceiverMT, pInterfaceMT))
+    {
+        // Only a witness with an independent proof can seed recursive constraints.
+        // An ungrounded cycle still returns false.
+        *ppWitnessMT = pActive->provenWitness;
+        *ppTargetMT = pActive->provenTarget;
+        return pActive->provenWitness != nullptr;
+    }
+
+    ResolvingPairHolder resolvingPair(pReceiverMT, pInterfaceMT);
+
+    MethodTable* pSelectedWitnessMT = nullptr;
+    MethodTable* pSelectedTargetMT = nullptr;
+    CollectCandidates(pReceiverMT, pInterfaceMT, &pSelectedWitnessMT, &pSelectedTargetMT, true);
 
     MethodTable* const ambiguous = reinterpret_cast<MethodTable*>(static_cast<UINT_PTR>(-1));
+    if (pSelectedWitnessMT != nullptr && pSelectedWitnessMT != ambiguous && resolvingPair.HasRecursiveDependency())
+    {
+        // A founded implementation can make an earlier cyclic candidate apply.
+        // Recheck with that established fact before publishing a unique winner.
+        resolvingPair.RecordProvenWitness(pSelectedWitnessMT, pSelectedTargetMT);
+        pSelectedWitnessMT = nullptr;
+        pSelectedTargetMT = nullptr;
+        CollectCandidates(pReceiverMT, pInterfaceMT, &pSelectedWitnessMT, &pSelectedTargetMT, true);
+    }
     if (pSelectedWitnessMT == ambiguous)
     {
         CacheResolution(pReceiverMT, pInterfaceMT, nullptr, nullptr, ResolutionState::Ambiguous);
@@ -2043,99 +2571,14 @@ static bool TryResolveApproximateInternal(
     *ppTargetMT = nullptr;
     if (pReceiverMT->IsNullable() ||
         pReceiverMT->IsByRefLike() ||
-        !pReceiverMT->IsSharedByGenericInstantiations() ||
+        (!TypeHandle(pReceiverMT).IsCanonicalSubtype() && !TypeHandle(pInterfaceMT).IsCanonicalSubtype()) ||
         !ExtensionInterface::IsExtensionSensitive(pReceiverMT, pInterfaceMT) ||
         pReceiverMT->CanCastToInterface(pInterfaceMT))
     {
         return false;
     }
 
-    StackSArray<MethodTable*> projections;
-    for (MethodTable* pCurrentMT = pReceiverMT; pCurrentMT != nullptr; pCurrentMT = pCurrentMT->GetParentMethodTable())
-    {
-        AppendProjection(&projections, pCurrentMT);
-    }
-
-    MethodTable::InterfaceMapIterator interfaceIterator = pReceiverMT->IterateInterfaceMap();
-    while (interfaceIterator.Next())
-    {
-        AppendProjection(&projections, interfaceIterator.GetInterface(pReceiverMT));
-    }
-
-    for (COUNT_T i = 0; i < projections.GetCount(); i++)
-    {
-        MethodTable* pProjectionMT = projections[i];
-        Module* pProjectionModule = pProjectionMT->GetModule();
-        if (!pProjectionModule->HasExtensionInterfaceImplementations())
-        {
-            continue;
-        }
-
-        ForEachManifestRow(pProjectionModule, pProjectionMT->GetCl(), [&](const ManifestRow& row)
-        {
-            if (row.owner == pProjectionMT->GetCl())
-            {
-                ConsiderCandidate(
-                    row,
-                    pProjectionModule,
-                    pInterfaceMT,
-                    pProjectionMT,
-                    ExtensionInterfaceImpl_TypeOwned,
-                    ppWitnessMT,
-                    ppTargetMT,
-                    false,
-                    false);
-            }
-        });
-    }
-
-    Module* pInterfaceModule = pInterfaceMT->GetModule();
-    if (pInterfaceModule->HasExtensionInterfaceImplementations())
-    {
-        ForEachManifestRow(pInterfaceModule, pInterfaceMT->GetCl(), [&](const ManifestRow& row)
-        {
-            if (row.flags != ExtensionInterfaceImpl_InterfaceOwned)
-            {
-                return;
-            }
-
-            TypeHandle targetRoot;
-            SignatureRootKind rootKind = GetSignatureRoot(
-                pInterfaceModule,
-                row.targetSignature,
-                row.targetSignatureSize,
-                &targetRoot);
-            if (rootKind == SignatureRootKind::TypeVariable)
-            {
-                ConsiderCandidate(
-                    row,
-                    pInterfaceModule,
-                    pInterfaceMT,
-                    pReceiverMT,
-                    ExtensionInterfaceImpl_InterfaceOwned,
-                    ppWitnessMT,
-                    ppTargetMT,
-                    false,
-                    false);
-                return;
-            }
-
-            for (COUNT_T i = 0; i < projections.GetCount(); i++)
-            {
-                ConsiderCandidate(
-                    row,
-                    pInterfaceModule,
-                    pInterfaceMT,
-                    projections[i],
-                    ExtensionInterfaceImpl_InterfaceOwned,
-                    ppWitnessMT,
-                    ppTargetMT,
-                    false,
-                    false);
-            }
-        });
-    }
-
+    CollectCandidates(pReceiverMT, pInterfaceMT, ppWitnessMT, ppTargetMT, false);
     return *ppWitnessMT != nullptr;
 }
 

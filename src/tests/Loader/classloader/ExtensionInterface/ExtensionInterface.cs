@@ -9,7 +9,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 
-public static class ExtensionInterfaceTests
+public static partial class ExtensionInterfaceTests
 {
     public static int Main()
     {
@@ -25,6 +25,8 @@ public static class ExtensionInterfaceTests
         ConstrainedGenericParametersRetainOriginalTypes();
         Console.WriteLine("canonical-calls");
         CanonicalBodiesSupportConstrainedAndStaticCalls();
+        Console.WriteLine("open-witness-definitions");
+        OpenWitnessDefinitionsAreReused();
         Console.WriteLine("coherence");
         CyclesDoNotJustifyThemselvesAndAmbiguityIsStable();
         Console.WriteLine("precedence");

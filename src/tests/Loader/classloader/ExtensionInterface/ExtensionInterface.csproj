@@ -9,9 +9,11 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="ExtensionInterface.cs" />
+    <Compile Include="OpenWitnessTests.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="ExtensionInterfaceForeignTypes.csproj" />
     <ProjectReference Include="ExtensionInterfaceTypes.ilproj" />
+    <ProjectReference Include="OpenWitnessTypes.ilproj" />
   </ItemGroup>
 </Project>

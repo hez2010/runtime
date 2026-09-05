@@ -1110,7 +1110,7 @@ namespace
     }
 
     bool ValidateCanonicalBodySignature(
-        MethodTable* pTargetMT,
+        TypeHandle target,
         MethodTable* pWitnessMT,
         MethodTable* pInterfaceMT,
         MethodDesc* pInterfaceMD,
@@ -1133,7 +1133,10 @@ namespace
         }
 
         MetaSig declarationSignature(pInterfaceMD, TypeHandle(pInterfaceMT));
-        MetaSig bodySignature(pBodyMD, TypeHandle(pWitnessMT));
+        // Method variables in the two definitions have different owners. Interpret
+        // both signatures with the declaration's method variables so that nested
+        // occurrences (such as !!0[] or List<!!0>) compare in the same context.
+        MetaSig bodySignature(pBodyMD, pWitnessMT->GetInstantiation(), pInterfaceMD->GetMethodInstantiation());
 
         if (pInterfaceMD->IsStatic())
         {
@@ -1149,7 +1152,9 @@ namespace
 
         CorElementType receiverType = bodySignature.NextArg();
         TypeHandle receiverTypeHandle;
-        if (pTargetMT->IsValueType())
+        bool valueReceiver = target.IsValueType() ||
+            (target.IsGenericVariable() && target.AsGenericVariable()->ConstrainedAsValueType());
+        if (valueReceiver)
         {
             if (receiverType != ELEMENT_TYPE_BYREF)
             {
@@ -1172,7 +1177,7 @@ namespace
             receiverTypeHandle = bodySignature.GetLastTypeHandleThrowing();
         }
 
-        if (!receiverTypeHandle.IsEquivalentTo(TypeHandle(pTargetMT)))
+        if (!receiverTypeHandle.IsEquivalentTo(target))
         {
             return false;
         }
@@ -1189,7 +1194,7 @@ namespace
     }
 
     bool FindCanonicalBody(
-        MethodTable* pTargetMT,
+        TypeHandle target,
         MethodTable* pWitnessMT,
         MethodTable* pInterfaceMT,
         MethodDesc* pInterfaceMD,
@@ -1231,21 +1236,26 @@ namespace
                 FALSE,
                 CLASS_LOAD_EXACTPARENTS);
             if (pBodyDefinition->GetMethodTable()->GetModule() != pModule ||
-                pBodyDefinition->GetMethodTable()->GetCl() != row.implementation)
+                pBodyDefinition->GetMethodTable()->GetCl() != row.implementation ||
+                pBodyDefinition->GetNumGenericMethodArgs() != pInterfaceMD->GetNumGenericMethodArgs())
             {
                 ThrowInvalidManifest();
             }
 
-            MethodDesc* pBodyMD = pBodyDefinition;
-            if (!pInterfaceMD->IsGenericMethodDefinition())
-            {
-                pBodyMD = MemberLoader::GetMethodDescFromMethodDef(
-                    pModule,
-                    row.body,
-                    pWitnessMT->GetInstantiation(),
-                    pInterfaceMD->GetMethodInstantiation());
-            }
-            if (!ValidateCanonicalBodySignature(pTargetMT, pWitnessMT, pInterfaceMT, pInterfaceMD, pBodyMD))
+            // Construct the method on the selected witness, including when the
+            // method itself is still open. All instantiations retain this MethodDef;
+            // normal generic code sharing and instantiating stubs supply entry points.
+            MethodDesc* pBodyMD = MethodDesc::FindOrCreateAssociatedMethodDesc(
+                pBodyDefinition,
+                pWitnessMT,
+                FALSE,
+                pInterfaceMD->IsGenericMethodDefinition()
+                    ? pBodyDefinition->GetMethodInstantiation()
+                    : pInterfaceMD->GetMethodInstantiation(),
+                FALSE,
+                pInterfaceMD->IsGenericMethodDefinition());
+            _ASSERTE(pBodyMD->HasSameMethodDefAs(pBodyDefinition));
+            if (!ValidateCanonicalBodySignature(target, pWitnessMT, pInterfaceMT, pInterfaceMD, pBodyMD))
             {
                 ThrowInvalidManifest();
             }
@@ -1262,7 +1272,7 @@ namespace
     }
 
     void ValidateWitnessMethodImplementations(
-        MethodTable* pTargetMT,
+        TypeHandle target,
         MethodTable* pWitnessMT,
         MethodTable* pDeclaredInterfaceMT)
     {
@@ -1287,7 +1297,7 @@ namespace
                 MethodDesc* pBodyMD;
                 if (pInterfaceMethod->IsAbstract() &&
                     !FindCanonicalBody(
-                        pTargetMT,
+                        target,
                         pWitnessMT,
                         pDeclaredInterfaceMT,
                         pInterfaceMethod,
@@ -1311,7 +1321,7 @@ namespace
             {
                 MethodDesc* pBodyMD;
                 if (!FindCanonicalBody(
-                        pTargetMT,
+                        target,
                         pWitnessMT,
                         pDeclaredInterfaceMT,
                         pInterfaceMethod,
@@ -1486,7 +1496,24 @@ namespace
             return;
         }
 
-        ValidateWitnessMethodImplementations(pProjectionMT, pWitnessMT, pDeclaredInterfaceMT);
+        // Validate against the declaration's open signatures. A body
+        // specialized to (for example) List<int> must not satisfy a List<!0>
+        // declaration merely because the first queried pair happens to use int.
+        SigTypeContext definitionContext(formalWitnessInstantiation, Instantiation());
+        TypeHandle openTarget = SigPointer(row.targetSignature, row.targetSignatureSize)
+            .GetTypeHandleThrowing(pModule, &definitionContext);
+        TypeHandle openInterface = SigPointer(row.interfaceSignature, row.interfaceSignatureSize)
+            .GetTypeHandleThrowing(pModule, &definitionContext);
+        MethodTable* pOpenInterfaceMT = openInterface.AsMethodTable();
+        ValidateWitnessMethodImplementations(openTarget, witnessDefinition.AsMethodTable(), pOpenInterfaceMT);
+        MethodTable::InterfaceMapIterator openInterfaceIterator = pOpenInterfaceMT->IterateInterfaceMap();
+        while (openInterfaceIterator.Next())
+        {
+            ValidateWitnessMethodImplementations(
+                openTarget,
+                witnessDefinition.AsMethodTable(),
+                openInterfaceIterator.GetInterface(pOpenInterfaceMT));
+        }
 
         if (*ppSelectedWitnessMT == nullptr)
         {
@@ -2165,7 +2192,7 @@ bool ExtensionInterface::TryResolveCanonicalBody(
     }
 
     if (FindCanonicalBody(
-        pTargetMT,
+        TypeHandle(pTargetMT),
         pWitnessMT,
         pInterfaceMT,
         pInterfaceMD,
@@ -2223,7 +2250,7 @@ bool ExtensionInterface::TryResolveCanonicalBodyApprox(
     }
 
     if (FindCanonicalBody(
-            pTargetMT,
+            TypeHandle(pTargetMT),
             pWitnessMT,
             pInterfaceMT,
             pInterfaceMD,

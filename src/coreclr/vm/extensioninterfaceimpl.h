@@ -22,7 +22,9 @@ namespace ExtensionInterface
     bool TryResolve(MethodTable* pReceiverMT, MethodTable* pInterfaceMT, MethodTable** ppWitnessMT);
 
     // Returns the canonical static body associated with an interface member. The
-    // body has an explicit receiver argument for instance interface members.
+    // body has an explicit receiver argument for instance interface members. The
+    // result is an ordinary instantiation of a MethodDef on the open witness;
+    // resolving a receiver/interface pair never creates or clones an IL body.
     bool TryResolveCanonicalBody(
         MethodTable* pReceiverMT,
         MethodTable* pInterfaceMT,

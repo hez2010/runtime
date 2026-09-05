@@ -559,6 +559,7 @@ public class OrdinaryColdBenchmarks
 public enum ExtensionColdScenario
 {
     TypeOwnedInherited,
+    TypeOwnedManyInterfaces,
     InterfaceOwnedGeneric,
     ConditionalRecursivePositive,
     ConditionalNegative,
@@ -582,6 +583,11 @@ public class ExtensionColdBenchmarks
         {
             case ExtensionColdScenario.TypeOwnedInherited:
                 _values = DynamicReceivers.CreateDerivedInstances(typeof(TypeOwnedTarget), TypeCount, "TypeOwned");
+                _predicate = static value => value is ITypeOwned;
+                _predicate(new TypeOwnedTarget(1));
+                break;
+            case ExtensionColdScenario.TypeOwnedManyInterfaces:
+                _values = DynamicReceivers.CreateDerivedInstances(typeof(TypeOwnedTarget), TypeCount, "TypeOwnedManyInterfaces", interfaceCount: 128);
                 _predicate = static value => value is ITypeOwned;
                 _predicate(new TypeOwnedTarget(1));
                 break;
@@ -634,9 +640,9 @@ internal static class DynamicReceivers
         return matches;
     }
 
-    public static object[] CreateDerivedInstances(Type baseType, int count, string prefix)
+    public static object[] CreateDerivedInstances(Type baseType, int count, string prefix, int interfaceCount = 0)
     {
-        Type[] types = CreateDerivedTypes(baseType, count, prefix);
+        Type[] types = CreateDerivedTypes(baseType, count, prefix, interfaceCount);
         var instances = new object[count];
         for (int i = 0; i < instances.Length; i++)
         {
@@ -645,15 +651,23 @@ internal static class DynamicReceivers
         return instances;
     }
 
-    public static Type[] CreateDerivedTypes(Type baseType, int count, string prefix)
+    public static Type[] CreateDerivedTypes(Type baseType, int count, string prefix, int interfaceCount = 0)
     {
         ModuleBuilder module = CreateDynamicModule(prefix);
         ConstructorInfo baseConstructor = baseType.GetConstructor(new[] { typeof(int) })!;
         var types = new Type[count];
+        var interfaces = new Type[interfaceCount];
+        for (int i = 0; i < interfaces.Length; i++)
+        {
+            interfaces[i] = module.DefineType($"I{prefix}_{i}",
+                TypeAttributes.Public | TypeAttributes.Interface | TypeAttributes.Abstract).CreateType()!;
+        }
 
         for (int i = 0; i < types.Length; i++)
         {
             TypeBuilder builder = module.DefineType($"{prefix}_{i}", TypeAttributes.Public | TypeAttributes.Sealed, baseType);
+            foreach (Type implementedInterface in interfaces)
+                builder.AddInterfaceImplementation(implementedInterface);
             ConstructorBuilder constructor = builder.DefineConstructor(MethodAttributes.Public, CallingConventions.Standard, new[] { typeof(int) });
             ILGenerator il = constructor.GetILGenerator();
             il.Emit(OpCodes.Ldarg_0);

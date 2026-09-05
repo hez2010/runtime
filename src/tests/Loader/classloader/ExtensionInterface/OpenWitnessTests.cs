@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
 
 public static partial class ExtensionInterfaceTests
 {
@@ -29,10 +30,13 @@ public static partial class ExtensionInterfaceTests
         Assert.Equal(receiverParameter.MakeByRefType(),
             definition.GetMethod("IncrementBody", WitnessMethods)!.GetParameters()[0].ParameterType);
 
-        VerifyOpenCounter(new SmallCounter { Value = 10 });
-        VerifyOpenCounter(new WideCounter { Value = 20, Sentinel = long.MaxValue });
-        VerifyOpenCounter(new GenericCounter<string> { Value = 30, Context = "context" });
-        VerifyOpenCounter(new GenericCounter<object> { Value = 40, Context = new object() });
+        // First resolution of the same open declaration can race across distinct
+        // closed receivers and shared generic method instantiations.
+        Parallel.Invoke(
+            () => VerifyOpenCounter(new SmallCounter { Value = 10 }),
+            () => VerifyOpenCounter(new WideCounter { Value = 20, Sentinel = long.MaxValue }),
+            () => VerifyOpenCounter(new GenericCounter<string> { Value = 30, Context = "context" }),
+            () => VerifyOpenCounter(new GenericCounter<object> { Value = 40, Context = new object() }));
         Assert.False(typeof(IOpenCounter).IsAssignableFrom(typeof(int)));
         Assert.False(typeof(IOpenCounter).IsAssignableFrom(typeof(StorageClass)));
 

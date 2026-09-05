@@ -42,6 +42,7 @@ namespace
         PCCOR_SIGNATURE interfaceSignature;
         ULONG interfaceSignatureSize;
         UINT16 flags;
+        mutable Volatile<bool> methodsValidated;
     };
 
     struct MethodManifestRow
@@ -388,6 +389,7 @@ namespace
             CQuickBytes targetSignature;
             CQuickBytes interfaceSignature;
             ManifestRow& row = pIndex->rows[rowIndex++];
+            new (&row) ManifestRow{};
             ParseManifestRow(pBlob, blobSize, &row, &targetSignature, &interfaceSignature);
 
             DWORD ownerAttributes;
@@ -2117,14 +2119,23 @@ namespace
             // declaration merely because the first queried pair happens to use int.
             TypeHandle openTarget = SigPointer(row.targetSignature, row.targetSignatureSize)
                 .GetTypeHandleThrowing(pModule, &definitionContext, ClassLoader::LoadTypes, CLASS_DEPENDENCIES_LOADED);
-            ValidateWitnessMethodImplementations(openTarget, witnessDefinition.AsMethodTable(), pOpenInterfaceMT);
-            MethodTable::InterfaceMapIterator openInterfaceIterator = pOpenInterfaceMT->IterateInterfaceMap();
-            while (openInterfaceIterator.Next())
+            if (!row.methodsValidated.Load())
             {
-                ValidateWitnessMethodImplementations(
-                    openTarget,
-                    witnessDefinition.AsMethodTable(),
-                    openInterfaceIterator.GetInterface(pOpenInterfaceMT));
+                ValidateWitnessMethodImplementations(openTarget, witnessDefinition.AsMethodTable(), pOpenInterfaceMT);
+                MethodTable::InterfaceMapIterator openInterfaceIterator = pOpenInterfaceMT->IterateInterfaceMap();
+                while (openInterfaceIterator.Next())
+                {
+                    ValidateWitnessMethodImplementations(
+                        openTarget,
+                        witnessDefinition.AsMethodTable(),
+                        openInterfaceIterator.GetInterface(pOpenInterfaceMT));
+                }
+
+                // Open method signatures depend only on this declaration. Publish
+                // success after checking every base contract; concurrent first
+                // users may repeat validation, but never observe partial success.
+                // Closed constraints and interface-view coherence remain per pair.
+                row.methodsValidated.Store(true);
             }
 
             if (needsInference && checkWitnessConstraints)
@@ -2461,26 +2472,6 @@ namespace
         }
     }
 
-    void AppendProjection(StackSArray<MethodTable*>* pProjections, MethodTable* pProjectionMT)
-    {
-        CONTRACTL
-        {
-            THROWS;
-            GC_NOTRIGGER;
-            MODE_ANY;
-        }
-        CONTRACTL_END;
-
-        for (COUNT_T i = 0; i < pProjections->GetCount(); i++)
-        {
-            if ((*pProjections)[i] == pProjectionMT)
-            {
-                return;
-            }
-        }
-
-        pProjections->Append(pProjectionMT);
-    }
 }
 
 void ExtensionInterface::Initialize()
@@ -2607,50 +2598,44 @@ static void CollectCandidates(
 {
     WRAPPER_NO_CONTRACT;
 
-    StackSArray<MethodTable*> projections;
-    for (MethodTable* pCurrentMT = pReceiverMT; pCurrentMT != nullptr; pCurrentMT = pCurrentMT->GetParentMethodTable())
+    if (pReceiverMT->HasTypeOwnedExtensionImpls())
     {
-        AppendProjection(&projections, pCurrentMT);
-    }
-
-    MethodTable::InterfaceMapIterator interfaceIterator = pReceiverMT->IterateInterfaceMap();
-    while (interfaceIterator.Next())
-    {
-        AppendProjection(&projections, interfaceIterator.GetInterface(pReceiverMT));
-    }
-
-    for (COUNT_T i = 0; i < projections.GetCount(); i++)
-    {
-        MethodTable* pProjectionMT = projections[i];
-        Module* pProjectionModule = pProjectionMT->GetModule();
-        if (!pProjectionModule->HasExtensionInterfaceImplementations())
+        // Interface targets are always interface-owned. Only the receiver and
+        // its base classes can contribute type-owned declarations.
+        for (MethodTable* pProjectionMT = pReceiverMT;
+             pProjectionMT != nullptr;
+             pProjectionMT = pProjectionMT->GetParentMethodTable())
         {
-            continue;
-        }
-
-        ForEachManifestRow(pProjectionModule, pProjectionMT->GetCl(), [&](const ManifestRow& row)
-        {
-            if (row.owner == pProjectionMT->GetCl())
+            Module* pProjectionModule = pProjectionMT->GetModule();
+            if (!pProjectionModule->HasExtensionInterfaceImplementations())
             {
-                ConsiderCandidate(
-                    row,
-                    pProjectionModule,
-                    pReceiverMT,
-                    pInterfaceMT,
-                    pProjectionMT,
-                    ExtensionInterfaceImpl_TypeOwned,
-                    ppSelectedWitnessMT,
-                    ppSelectedTargetMT,
-                    exact,
-                    exact,
-                    false,
-                    pSelectedContract);
+                continue;
             }
-        });
+
+            ForEachManifestRow(pProjectionModule, pProjectionMT->GetCl(), [&](const ManifestRow& row)
+            {
+                if (row.owner == pProjectionMT->GetCl())
+                {
+                    ConsiderCandidate(
+                        row,
+                        pProjectionModule,
+                        pReceiverMT,
+                        pInterfaceMT,
+                        pProjectionMT,
+                        ExtensionInterfaceImpl_TypeOwned,
+                        ppSelectedWitnessMT,
+                        ppSelectedTargetMT,
+                        exact,
+                        exact,
+                        false,
+                        pSelectedContract);
+                }
+            });
+        }
     }
 
     Module* pInterfaceModule = pInterfaceMT->GetModule();
-    if (pInterfaceModule->HasExtensionInterfaceImplementations())
+    if (pInterfaceMT->HasInterfaceOwnedExtensionImpls())
     {
         ForEachManifestRow(pInterfaceModule, pInterfaceMT->GetCl(), [&](const ManifestRow& row)
         {
@@ -2694,12 +2679,17 @@ static void CollectCandidates(
                 return;
             }
 
-            if (rootKind == SignatureRootKind::Nominal && targetRoot.IsInterface())
+            if (row.targetSignature[0] == ELEMENT_TYPE_SZARRAY ||
+                row.targetSignature[0] == ELEMENT_TYPE_ARRAY ||
+                (rootKind == SignatureRootKind::Nominal &&
+                 (targetRoot.IsInterface() || targetRoot.AsMethodTable()->HasVariance())))
             {
                 // Determine the target before testing satisfaction. Inferring an
                 // argument from this receiver's nominal interfaces could accept
                 // an interface type argument whose extension-only inhabitants
                 // cannot reconstruct that argument at dispatch time.
+                // Array and variant delegate targets likewise do not depend on
+                // the receiver's nominal projections, so consider them just once.
                 ConsiderCandidate(
                     row, pInterfaceModule, pReceiverMT, pInterfaceMT, pReceiverMT,
                     ExtensionInterfaceImpl_InterfaceOwned, ppSelectedWitnessMT, ppSelectedTargetMT,
@@ -2707,14 +2697,16 @@ static void CollectCandidates(
                 return;
             }
 
-            for (COUNT_T i = 0; i < projections.GetCount(); i++)
+            for (MethodTable* pProjectionMT = pReceiverMT;
+                 pProjectionMT != nullptr;
+                 pProjectionMT = pProjectionMT->GetParentMethodTable())
             {
                 ConsiderCandidate(
                     row,
                     pInterfaceModule,
                     pReceiverMT,
                     pInterfaceMT,
-                    projections[i],
+                    pProjectionMT,
                     ExtensionInterfaceImpl_InterfaceOwned,
                     ppSelectedWitnessMT,
                     ppSelectedTargetMT,
